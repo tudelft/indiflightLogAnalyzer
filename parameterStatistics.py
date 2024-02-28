@@ -131,7 +131,7 @@ plt.rcParams.update({
     'figure.subplot.bottom': 0.17,
     'figure.subplot.left': 0.07,
     'figure.subplot.right': 0.96,
-    'figure.subplot.top': 0.95,
+    'figure.subplot.top': 0.93,
     'figure.subplot.hspace': 0.3,
     'figure.subplot.wspace': 0.4,
     'figure.titlesize': 'large',
@@ -293,6 +293,66 @@ for axi, ax in enumerate(['p', 'q', 'r']):
     frls.suptitle(f"Online Estimation for {axis_names[axi]} Effectiveness")
 
     frls.savefig(f"Fx_estimation_{ax}.pdf", format='pdf')
+
+# motors
+timeMs = log.data['timeMs'] - 1435
+boolarr = (timeMs > 0) & (timeMs < 457)
+timeMs = timeMs[boolarr]
+crop = log.data[boolarr]
+
+order = 2
+fc = 40 # Hz
+
+omegaRaw = Signal(crop['timeS'], crop[[f'omegaUnfiltered[{i}]' for i in range(4)]])
+dRaw = Signal(crop['timeS'], crop[[f'motor[{m}]' for m in range(4)]])
+dSqrtRaw = Signal(crop['timeS'], np.sqrt(crop[[f'motor[{m}]' for m in range(4)]]))
+
+dFilt = dRaw.filter('lowpass', order, fc)
+dSqrtFilt = dSqrtRaw.filter('lowpass', order, fc)
+
+omegaMotorFilt = omegaRaw.filter('lowpass', order, fc)
+
+for motor in range(4):
+    frls, axs = plt.subplots(1, 3, figsize=(9, 3), sharex=True)
+
+    theta = crop[[f'motor_{motor}_rls_x[{i}]' for i in range(4)]].to_numpy()
+    wm = theta[:, 0] + theta[:, 1]
+    k = 0.5
+    a = wm * k
+    b = 1 - a
+    theta[:, 0] = a
+    theta[:, 1] = b
+    regMotor = np.zeros_like(theta)
+    regMotor[:, 0] = dFilt.y[:, motor]
+    regMotor[:, 1] = dSqrtFilt.y[:, motor]
+    regMotor[:, 2] = 1.
+    regMotor[:, 3] = -omegaMotorFilt.dot().y[:, motor]
+    reproduction = np.array([t.T @ r for t, r in zip(theta, regMotor)])
+
+    axs[0].plot(timeMs, omegaRaw.y[:, motor], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered")
+    axs[0].plot(timeMs, omegaMotorFilt.y[:, motor], lw=1.0, ls='-', label=f"synchro-filtered")
+    axs[0].plot(timeMs, reproduction, lw=1.5, ls='-.', label=f"Online reproduction")
+    axs[0].set_xlabel("Time [ms]")
+    axs[0].set_ylabel("Motor Rotation Rate [rad/s]")
+    axs[0].set_ylim(bottom=-1e3, top=5e3)
+    axs[0].legend(loc="upper left")
+
+    axs[1].plot(timeMs, wm)
+    axs[1].plot(timeMs, theta[:, 2])
+    axs[1].set_ylim(bottom=-1e3, top=5e3)
+    axs[1].set_xlabel("Time [ms]")
+    axs[1].set_ylabel("Motor Parameters [rad/s]")
+    axs[1].legend(['Max Speed', 'Idle Speed'], loc='upper left', ncols=1)
+
+    axs[2].plot(timeMs, theta[:, 3])
+    axs[2].set_ylim(bottom=-3e-2, top=5e-2)
+    axs[2].set_xlabel("Time [ms]")
+    axs[2].set_ylabel("Motor time constant $\\tau$ [s]")
+    axs[2].legend("Time constant")
+
+    frls.suptitle(f"Online Estimation for Motor Model {motor}")
+
+    frls.savefig(f"Motor_estimation_{motor}.pdf", format='pdf')
 
 # %% Plot trajectories
 

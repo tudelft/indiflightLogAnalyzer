@@ -82,9 +82,9 @@ Pz = None
 Raxle = 5 * 0.5e-3 # motor axle radius (to calculate location of rotation point)
 
 # Option 2: direct
-Ixx = 0.0007205811943796118 * 2.
-Iyy = 0.0007756948209436508 * 2.
-Izz = 0.0008860337750707033 * 2.
+Ixx = 0.0007205811943796118
+Iyy = 0.0007756948209436508
+Izz = 0.0008860337750707033
 
 
 #%% prop and motor inertia
@@ -98,10 +98,7 @@ Rp = 36.0e-3 # 1mm error: 10% error in inertia --> estimated precision 0.5mm, so
 # 1% mass error: 1% error in inertia --> estimated precision 0.02g, so 1.5% error
 
 # Option 2: prop inertia estimation via mass and diameter
-Dpinch = 5. # prop diameter in inch
-
-# motor bell inertia from motor dimensions, very crude
-motorNumber = 2207
+Dpinch = 3. # prop diameter in inch
 
 # motor bell inertia from motor dimensions, very crude
 motorNumber = 1407
@@ -109,7 +106,7 @@ motorNumber = 1407
 
 #%% propeller/ESC/motor performance at 4S battery (see prop.py)
 
-tau = 0.02 # spinup/spindown time constant
+tau = 0.025 # spinup/spindown time constant
 Tmax = 4.5 # max thrust black prop
 k = 2.66e-7 # black prop
 CM = 0.01 # steady-state moment coefficient M = CM * T
@@ -218,6 +215,46 @@ Iprop_bak += inertiaBellFromMotorNumber(1407)
 #
 #   DeltaA + G2 / Tmax * wdot_prev = ( G1 + G2n / w0 ) DeltaU
 
+
+
+##################
+# 2024-02-25 slightly nicer formulation for online learning (G2 not scaled with Tmax)
+# 
+#  let O = (Fx Fy Fz Mx My Mz)
+# idea: DeltaO = B1 * DeltaT  +  B2 * DeltaWdot
+# 
+# where B1 holds information about thrust axes and motor locations
+# and   B2 holds information about thrust axes and propeller inertia
+# 
+# using w = sqrt(T/k), first-order dynamics wdot = (w - w0)/tau and taylor 
+# expansion of the square root results in:
+# 
+#   DeltaO = B1 DeltaT  +  B2 / (2*w0*tau*k) * (DeltaT - DeltaTprev)
+#
+# Introduce the normalized unitless control U = T / Tmax
+#
+#   DeltaO = B1 Tmax DeltaU                +  B2 * Tmax / (2*tau*k*w0) * (DeltaU - DeltaUprev)
+#   DeltaO = B1 * k * omegaMax^2 * DeltaU  +  B2 * omegaMax^2 / (2*tau*w0) * (DeltaU - DeltaUprev)
+#
+# Introduce specific generalized forces A = (fx fy fz taux tauy tauz) with 
+# units (N/kg N/kg N/kg Nm/(kgm^2) Nm/(kgm^2) Nm/(kgm^2)) and
+#
+#   DeltaA = G1 DeltaU  +  G2 * omegaMax^2 / (2*tau*w0) * (DeltaU - DeltaUprev)
+#      where  G1   == (Minv B1) * k * omegaMax^2  , where (Minv B1 * k) can be learned online and then scaled with omegaMax^2 which is separetely learned online
+#        or   G1   == (Minv B1) * Tmax            , which seems more accurate, if available
+#      and    G2   == (Minv B2)                   , which can be learned online
+#      and    Minv == inv(diag(m,m,m,Ixx,Iyy,Izz)), called generalized mass matrix
+# 
+# this can later be inverted to compute DeltaU by solving:
+#
+#   DeltaA + G2n / w0 DeltaU_prev = ( G1 + G2n / w0 )  DeltaU
+#      where G2n = G2 * omegaMax^2 / (2*tau)
+#
+# or, assuming wdot feedback is available
+#
+#   DeltaA + G2 * wdot_prev = ( G1 + G2n / w0 ) DeltaU
+##################
+
 B1 = np.zeros((6, N))
 B2 = np.zeros((6, N))
 B2[3:, :] = -np.array(direc)*axes * Imotorprop
@@ -233,17 +270,29 @@ for i in range(N):
     # moment due to rotor drag
     B1[3:, i] += -CM*direc[i]*axes[:, i] # negative because reaction force
 
+omegaMax = np.sqrt(Tmax / k) # approximation
+
 M = np.diag([m,m,m,Ixx,Iyy,Izz]) # generalized mass
-G1 = np.linalg.solve(M, B1) * Tmax
-G2 = np.linalg.solve(M, B2) * Tmax
-G2n = G2 / (2*tau*k)
+
+# first formulation
+# G1 = np.linalg.solve(M, B1) * Tmax
+# G2 = np.linalg.solve(M, B2) * Tmax 
+# G2_scaler = 1 / (2*tau*k)
+
+# second formulation above. This should be equivalent to first formulation for G1, G2n and Ginv (but not G2)
+G1 = np.linalg.solve(M, B1) * k * omegaMax**2
+G2 = np.linalg.solve(M, B2)
+G2_scaler = omegaMax**2 / (2*tau)
+
+G2n = G2_scaler * G2
 w0_hover = np.sqrt(m*GRAVITY/N / k)
 Ginv_hover = np.linalg.pinv(G1 + G2n / w0_hover)
 
 
 #%% print
 print(f"G1:\n{G1}")
-print(f"G2:\n{G2}")
-print(f"G2_normalizer: {1/(2*tau*k)}")
+print(f"G2 excluding Tmax:\n{G2}")
+print(f"G2 including Tmax:\n{G2 * Tmax}")
+print(f"G2_scaler: {G2_scaler}")
 print(f"G2n:\n{G2n}")
 print(f"inv(G1 + G2n/w0) at hover:\n{Ginv_hover}")

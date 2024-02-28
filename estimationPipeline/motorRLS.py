@@ -21,17 +21,19 @@ if __name__=="__main__":
     # fitting parameters
     fc = 40. # Hz. tau = 1/(2*pi*fc) if first order
     order = 2 # 1 --> simple first order. 2 and up --> butterworth
-    gamma = 1e7
+    gamma = 1e1
     forgetting = 0.995 # todo: dependent on sampling rate?
 
     # load unfiltered data into numpy
     log = IndiflightLog(args.datafile, args.range)
     u     = Signal(log.data['timeS'], log.data[[f'u[{i}]' for i in range(N_ACT)]])
+    uSqrt = Signal(log.data['timeS'], np.sqrt(u.y))
     omega = Signal(log.data['timeS'], log.data[[f'omegaUnfiltered[{i}]' for i in range(N_ACT)]])
 
     # filter unfiltered data
     uFilt = u.filter('lowpass', order, fc)
-    uFilt.setSignal(np.clip(uFilt.y, 0., 1.)) # can happen on order > 1
+    uFilt.setSignal(np.clip(uFilt.y, 0., 1.)) # can happen on order > 1. Not needed anymore if uSqrtFilt is used
+    uSqrtFilt = uSqrt.filter('lowpass', order, fc)
 
     omegaFilt = omega.filter('lowpass', order, fc)
 
@@ -41,11 +43,12 @@ if __name__=="__main__":
         for i in range(len(log.data)):
             a = np.array([[
                 uFilt.y[i, motor],
-                np.sqrt(uFilt.y[i, motor]), 
+                #np.sqrt(uFilt.y[i, motor]), # check if fitering after square root makes sense
+                uSqrtFilt.y[i, motor],
                 1.,
-                -omegaFilt.dot().y[i, motor],
+                -omegaFilt.dot().y[i, motor]*1e-4,
             ]])
-            y = omegaFilt.y[i, motor]
+            y = omegaFilt.y[i, motor] * 1e-3
             est.newSample(a, y)
 
         motorDict = {}
@@ -61,7 +64,7 @@ if __name__=="__main__":
         motors.append(motorDict)
 
         est.setName(f"Motor {motor}")
-        est.setParameterNames(["$a$", "$b$", "$\omega_0$", "$\\tau$"])
+        est.setParameterNames(["$a$", "$b$", "$\omega_0$", "$\\tau\cdot 10^{5}$"])
         est.setRegressorNames([["$u$", "$\sqrt{u}$", "unity", "$-\dot\omega$"]])
         est.setOutputNames([f"$\omega_{motor}$"])
 

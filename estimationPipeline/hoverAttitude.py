@@ -9,18 +9,29 @@ W = np.eye(N_ACT) # actuator weighing matrix in hover
 #%% do stuff
 
 # standard effectiveness matrix of a quadrotor
-Bf = np.zeros((3, N_ACT))
-Bf[2, :] = -5
+BfGT = np.zeros((3, N_ACT))
+BfGT[2, :] = -1
 
-Br = np.zeros((3, N_ACT))
-Br[0, :] = [-1, -1, 1, 1, 2, 3]
-Br[1, :] = [-1, 1, -1, 1, 2, 3]
-Br[2, :] = [1, -1, -1, 1, 2, 3]
+BrGT = np.zeros((3, N_ACT))
+#BrGT[0, :] = [-1, -1, 1, 1, 2, 3]
+#BrGT[1, :] = [-1, 1, -1, 1, 2, 3]
+#BrGT[2, :] = [1, -1, -1, 1, 2, 3]
+BrGT[0, :] = [-1, -1, 1, 1, 2, 3]
+BrGT[1, :] = [-1, 1, -1, 1, 2, 3]
+BrGT[2, :] = [1, -1, -1, 1, 2, 3]
+
+#AT P = QR
+#AT = QR PT
+#A = P RT QT
 
 # rotate randomly
+#R = np.array([[-0.4891257 ,  0.26580112,  0.83072608],
+#              [ 0.78974489, -0.2693009 ,  0.55116244],
+#              [ 0.37021487,  0.92564939, -0.07819308]])
+#np.random.seed(42)
 R = Rotation.random().as_matrix()
-Bf = R @ Bf
-Br = R @ Br
+Bf = R @ BfGT + 0.25*(np.random.random((3,6)) - 0.5)
+Br = R @ BrGT + 0.25*(np.random.random((3,6)) - 0.5)
 
 # get rotation nullspace
 Q = np.linalg.qr(Br.T, 'complete')[0]
@@ -46,7 +57,7 @@ def fisqrt(x):
     else:
         # direct bit manipulation to get binary of IEEE 754 floats
         # fun!
-        e = 0x7F + int(np.log2(x))
+        e = 0x7F + max(1, int(np.log2(x)))
         m = int((x / (2 << (e-0x80)) - 1) * (2 << 22))
         ix = (e << 23) + m
         iy = 0x5F3759DF - (ix >> 1)
@@ -58,7 +69,8 @@ def fisqrt(x):
     return y
 
 # power iteration, let's do one per estimation loop iteration (use warmstarting eventually!)
-v = np.random.random(N_ACT - 3)
+#v = np.random.random(N_ACT - 3)
+v = np.array([0.5, 1., 1.])
 i = 1
 while i > 0:
     Av = A @ v

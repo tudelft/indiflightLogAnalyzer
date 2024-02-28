@@ -160,6 +160,7 @@ class RLS(object):
         self.e_hist = []
         self.x_hist = []
         self.P_hist = []
+        self.lam_hist = []
 
     def setName(self, name):
         self.name = name
@@ -211,12 +212,29 @@ class RLS(object):
             if (y.shape != (self.d, 1)):
                 raise ValueError(f"If output y is ndim=2, it has to be shape {(self.d, 1)}, got {y.shape}")
 
+        # error in e
+        dt = 0.001
+        e = y - A @ self.x
+
+        varv = 0e-4 # output noisew
+        varw = 0e0 # input noise
+        varEst = varv + A @ self.P @ A.T + np.sum(np.diag(self.P) * varw)
+        # sig = np.squeeze(np.sqrt( e.dot(e) / varEst )) if varEst > 0. else 0.
+
         # regressors a and observation y
         lam = self.forgetting
-        K = ( self.P @ A.T ) @ np.linalg.inv( lam * np.eye(self.d) + A @ self.P @ A.T )
-        self.P = (1. / lam) * (self.P - K @ A @ self.P)
+        #lam = 1.
+        # kappa = 1e0
+        # lam = np.clip(1. - kappa*dt*sig, 1.0 - 1e1*kappa*dt, 1.0)
+        # print(lam)
 
-        e = y - A @ self.x
+        M = lam * np.eye(self.d) + A @ self.P @ A.T
+        K = ( self.P @ A.T ) @ np.linalg.inv(M)
+        newP = self.P - K @ A @ self.P
+        #fac = np.clip(np.trace(newP) / np.trace(self.P), 0.1, 10.)
+        fac = 1
+        self.P = (self.P - K @ A @ self.P * fac) / lam
+
         if (disable==None):
             self.x += K @ e
         else:
@@ -229,6 +247,7 @@ class RLS(object):
         self.e_hist.append(e.copy())
         self.x_hist.append(self.x.copy())
         self.P_hist.append(self.P.copy())
+        self.lam_hist.append(lam)
 
     def predictNew(self, A):
         return A @ self.x

@@ -44,6 +44,8 @@ if __name__=="__main__":
     accFilt = acc.filter('lowpass', order, fc)
     accCorrectedFilt = accCorrected.filter('lowpass', order, fc)
 
+    omegaDotDiffScaler = 10.
+
     # axes
     axisNames = ['$f_x$', '$f_y$', '$f_z$',
                  'Roll', 'Pitch', 'Yaw']
@@ -51,19 +53,20 @@ if __name__=="__main__":
                    '$\Delta\dot p$', '$\Delta\dot q$', '$\Delta\dot r$']
     axisEstimators = []
     axisSelect = list(range(6)) # or [2] to get only accZ for instance 
+    axisSelect = [2,5]
     for axis in axisSelect:
         if axis < 3:
             # specific force
             est = RLS(N_ACT, 1, gamma=gamma, forgetting=forgetting)
 
-            regressors = 2 * omegaFilt.y * omegaFilt.diff().y
+            regressors = 2 * omegaFilt.y * omegaFilt.diff().y * 1e-5
             ys = accFilt.diff().y[:, axis]
         else:
             # dgyro, we also need rotor rate
             est = RLS(2*N_ACT, 1, gamma=gamma, forgetting=forgetting)
 
-            regressorsForce = 2 * omegaFilt.y * omegaFilt.diff().y
-            regressorsGyro  = omegaFilt.dot().diff().y
+            regressorsForce = 2 * omegaFilt.y * omegaFilt.diff().y * 1e-5
+            regressorsGyro  = omegaFilt.dot().diff().y * 1e-4
             regressors = np.concatenate((regressorsForce, regressorsGyro), axis=1)
             ys = gyroFilt.dot().diff().y[:, axis-3]
 
@@ -73,7 +76,7 @@ if __name__=="__main__":
         regressorNames = [f"$2\omega_{i}\Delta\omega_{i}$" for i in range(4)]
         parGroups = [[0,1,2,3]]
         if axis >= 3:
-            regressorNames += [f"$\Delta\dot\omega_{i}$" for i in range(4)]
+            regressorNames += [f"$\Delta\dot\omega_{i}\cdot 10$" for i in range(4)]
             parGroups.append([4,5,6,7])
 
         est.setName(f"{axisNames[axis]} Effectiveness Estimation")

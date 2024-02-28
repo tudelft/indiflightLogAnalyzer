@@ -17,10 +17,11 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     # fitting parameters
-    fc = 10. # Hz. tau = 1/(2*pi*fc) if first order
+    fc = 200. # Hz. tau = 1/(2*pi*fc) if first order
     order = 2 # 1 --> simple first order. 2 and up --> butterworth
-    gamma = 1e5
-    forgetting = 1.0 # todo: dependent on sampling rate?
+    gamma = 1e4
+    forgetting = 1. # todo: dependent on sampling rate?
+    forgetting = 1.
 
     # load unfiltered data into numpy
     log = IndiflightLog(args.datafile, args.range)
@@ -34,25 +35,25 @@ if __name__=="__main__":
     gyroFilt = gyro
     accFilt  = acc
 
-    est = RLS(3, 3, gamma=gamma, forgetting=forgetting)
+    est = RLS(6, 3, gamma=gamma, forgetting=forgetting)
     for i in range(len(log.data)):
         wx, wy, wz    = gyroFilt.y[i]
         dwx, dwy, dwz = gyroFilt.dot().y[i]
         A = np.array([
-            [-(wy*wy + wz*wz),    wx*wy - dwz   ,    wx*wz + dwy   ],
-            [  wx*wy + dwz   ,  -(wx*wx + wz*wz),    wy*wz - dwx   ],
-            [  wx*wz - dwy   ,    wy*wz + dwx   ,  -(wx*wx + wy*wy)],
+            [-(wy*wy + wz*wz),    wx*wy - dwz   ,    wx*wz + dwy   , 10., 0., 0.],
+            [  wx*wy + dwz   ,  -(wx*wx + wz*wz),    wy*wz - dwx   , 0. , 10., 0.],
+            [  wx*wz - dwy   ,    wy*wz + dwx   ,  -(wx*wx + wy*wy), 0. , 0., 10.],
             ])
         # equally weighing all 3 axes
         est.newSample(A, accFilt.y[i])
 
     est.setName("IMU offset estimator")
-    est.setParameterNames(["$d_x$", "$d_y$", "$d_z$"])
+    est.setParameterNames(["$d_x$", "$d_y$", "$d_z$", "$f_{0,x}$", "$f_{0,y}$", "$f_{0,z}$"])
     # est.setRegressorNames( NOT SET )
     est.setOutputNames(["$f_x$", "$f_y$", "$f_z$"])
 
     f = est.plotParameters(
-        parGroups=[[0], [1], [2]],
+        parGroups=[[0], [1], [2], [3,4,5,]],
         yGroups=[[0], [1], [2]],
         timeMs=log.data['timeMs'],
         sharey=True,

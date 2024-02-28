@@ -35,6 +35,21 @@ if __name__=="__main__":
     # import data
     log = IndiflightLog(args.datafile, args.range, not args.no_cache)
 
+    from logTools.estimators import imuOffsetCorrection, Signal
+    import numpy as np
+
+    a = log.data[[f"accUnfiltered[{i}]" for i in range(3)]].to_numpy()
+    w = log.data[[f"gyroADCafterRpm[{i}]" for i in range(3)]].to_numpy()
+    aSig = Signal(log.data["timeS"], a).filter('lowpass', 2, 25)
+    wSig = Signal(log.data["timeS"], w).filter('lowpass', 2, 25)
+    dw = wSig.dot();
+    r = np.array([-0.010, -0.010, 0.015])
+    #r = np.array([-0.01, -0.005, 0.000])
+    #r = np.array([-0.010, -0.015, 0.010])
+    f_cor = imuOffsetCorrection(aSig.y.copy(), wSig.y.copy(), dw.y.copy(), r)
+
+    log.data[[f"accSmooth[{i}]" for i in range(3)]] = f_cor
+
     # plot some stuff
     if args.compare:
         i, f = args.range

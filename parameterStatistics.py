@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 from logTools import IndiflightLog, imuOffsetCorrection
 from glob import glob
@@ -105,8 +106,39 @@ print((1e6                            *G1df).to_latex(float_format="%.3f"))
 print((1e3                            *G2df).to_latex(float_format="%.3f"))
 print((np.array([[1.,1.,1.,1000.]]).T *motordf).to_latex(float_format="%.3f"))
 
+#%% Initial condition scatter
+
 from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+plt.close('all')
+
+plt.rcParams.update({
+    "text.usetex": True,
+#    "font.family": "Helvetica",
+    "font.family": "sans-serif",
+    "font.size": 12,
+    "axes.grid": True,
+    "axes.grid.which": 'both',
+    "grid.linestyle": '--',
+    "grid.alpha": 0.7,
+    "axes.labelsize": 10,
+    "axes.titlesize": 16,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.loc": 'upper right',
+    "legend.fontsize": 9,
+    "legend.columnspacing": 2.0,
+    'figure.subplot.bottom': 0.18,
+    'figure.subplot.left': 0.1,
+    'figure.subplot.right': 0.95,
+    'figure.subplot.top': 0.95,
+    'figure.subplot.hspace': 0.3,
+    'figure.subplot.wspace': 0.35,
+    'figure.titlesize': 'large',
+    'lines.linewidth': 1,
+})
+
+from cycler import cycler
+plt.rcParams['axes.prop_cycle'] = cycler('linestyle', ['-', '--', ':', '-.'])
 
 p0, q0, r0 = df[['p0', 'q0', 'r0']].to_numpy(dtype=float).T * 180./np.pi
 minH = df['minH']
@@ -127,3 +159,33 @@ ax.view_init(elev=17, azim=-137)
 
 fig.savefig('InitialRotation.pdf', format='pdf')
 #fig.show()
+
+
+## Time plots excitation
+
+log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-02-27/Experiments500HzLoggingAndThrows/LOG00228.BFL")
+timeMs = log.data['timeMs'] - 1435
+boolarr = (timeMs > 0) & (timeMs < 457)
+timeMs = timeMs[boolarr]
+crop = log.data[boolarr]
+
+f, axs = plt.subplots(1, 2, figsize=(8, 3.0), sharex='all')
+for i in range(4):
+    axs[0].plot(timeMs,
+                crop[f'motor[{i}]'],
+                label=f'Motor {i}')
+    axs[0].set_ylabel("Motor input $\delta$ [-]")
+    axs[1].plot(timeMs,
+                crop[f'omegaUnfiltered[{i}]'],
+                label=f'Motor {i}')
+    axs[1].set_ylabel("Measured Motor Velocity [rad/s]")
+    axs[0].set_xlabel("Time [ms]")
+    axs[1].set_xlabel("Time [ms]")
+
+axs[0].set_ylim(top=1.)
+axs[1].set_ylim(top=4000.)
+axs[0].legend( ncol=2 )
+
+f.savefig('Excitation.pdf', format='pdf')
+
+# %%

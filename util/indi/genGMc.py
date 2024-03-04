@@ -59,18 +59,6 @@ direc = [-1, 1, 1, -1] # motor rotation directions (positive -> right hand along
 
 # inertia
 
-# before new bottom plate and bumpers
-# m = 0.3826 # kg
-# Px = 0.5801
-# Py = 0.5709
-# Pz = 0.6295 # Period for z-axis rotation
-
-# after modifications
-m = 0.520 # kg
-direc = [-1, 1, 1, -1] # motor rotation directions (positive -> right hand along prop thrust vector), sequence FL, FR, RR, RL
-
-# inertia
-
 # Option 1: from pendulum periods
 # let quad oscillate as a pendulum around the motor axles in all 3 directions
 # record oscillation periods in seconds using the IMU
@@ -286,7 +274,13 @@ G2_scaler = omegaMax**2 / (2*tau)
 
 G2n = G2_scaler * G2
 w0_hover = np.sqrt(m*GRAVITY/N / k)
+
 Ginv_hover = np.linalg.pinv(G1 + G2n / w0_hover)
+# or, if axes all point to -z: case 3 of sec 3.2.7 of matrix cookbook https://www.math.uwaterloo.ca/~hwolkowi/matrixcookbook.pdf
+G1pinv = np.linalg.pinv(G1)
+G1pinv5 = G1pinv[:, 5][:, np.newaxis]
+dT = (G2n / w0_hover)[5,:][np.newaxis]
+Ginv_hover_efficient = G1pinv - (G1pinv5 @ (dT @ G1pinv)) / (1 + dT @ G1pinv5) # very efficient and O(n*d)
 
 
 #%% print
@@ -296,3 +290,4 @@ print(f"G2 including Tmax:\n{G2 * Tmax}")
 print(f"G2_scaler: {G2_scaler}")
 print(f"G2n:\n{G2n}")
 print(f"inv(G1 + G2n/w0) at hover:\n{Ginv_hover}")
+

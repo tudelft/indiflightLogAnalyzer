@@ -182,13 +182,13 @@ for i in range(4):
                 crop[f'omegaUnfiltered[{i}]'],
                 label=f'Motor {i}')
     axs[1].set_xlabel("Time [ms]")
-    axs[1].set_ylabel("Motor Rotation Rate $\Omega$ [rad/s]")
+    axs[1].set_ylabel("Motor Rotation Rate $\omega$ [rad/s]")
 
 
 axs[2].plot(timeMs,
             180./np.pi * crop[[f'gyroADCafterRpm[{i}]' for i in range(3)]])
 axs[2].set_xlabel("Time [ms]")
-axs[2].set_ylabel("Body Rotation Rate $\omega$ [deg/s]")
+axs[2].set_ylabel("Body Rotation Rate $\Omega$ [deg/s]")
 axs[2].legend(["Roll", "Pitch", "Yaw"], loc='upper left')
 
 axs[0].set_ylim(top=1.)
@@ -246,7 +246,7 @@ for axi, ax in enumerate(['x', 'y', 'z']):
     reproduction = np.array([t.T @ r for t, r in zip(theta, regSpf)])
 
     axs[0].plot(timeMs, spfRawCor.diff().y[:, axi], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered")
-    axs[0].plot(timeMs, spfFiltCor.diff().y[:, axi], lw=1.0, ls='-', label=f"synchro-filtered")
+    axs[0].plot(timeMs, spfFiltCor.diff().y[:, axi], lw=1.0, ls='-', label=f"Synchro-filtered")
     axs[0].plot(timeMs, reproduction, lw=1.5, ls='-.', label=f"Online reproduction")
     axs[0].set_xlabel("Time [ms]")
     axs[0].set_ylabel("Specific Force Delta [N/kg]")
@@ -271,7 +271,7 @@ for axi, ax in enumerate(['p', 'q', 'r']):
     reproduction = np.array([t.T @ r for t, r in zip(theta, regRot)])
 
     axs[0].plot(timeMs, gyroRaw.dot().diff().y[:, axi], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered")
-    axs[0].plot(timeMs, gyroFilt.dot().diff().y[:, axi], lw=1.0, ls='-', label=f"synchro-filtered")
+    axs[0].plot(timeMs, gyroFilt.dot().diff().y[:, axi], lw=1.0, ls='-', label=f"Synchro-filtered")
     axs[0].plot(timeMs, reproduction, lw=1.5, ls='-.', label=f"Online reproduction")
     axs[0].set_xlabel("Time [ms]")
     axs[0].set_ylabel("Rotation Acceleration Delta [$rad/s^2$]")
@@ -279,7 +279,10 @@ for axi, ax in enumerate(['p', 'q', 'r']):
     axs[0].legend(loc="lower left")
 
     axs[1].plot(timeMs, theta[:, :4])
-    axs[1].set_ylim(bottom=-2e-4, top=2e-4)
+    if ax == 'r':
+        axs[1].set_ylim(bottom=-0.5e-4, top=0.5e-4)
+    else:
+        axs[1].set_ylim(bottom=-1e-4, top=1e-4)
     axs[1].set_xlabel("Time [ms]")
     axs[1].set_ylabel("Effectiveness [$\\frac{Nm/(kg\cdot m^2)}{(rad/s)^2}$]")
     axs[1].legend([f'Motor {i}' for i in range(4)], loc='upper left', ncols=2)

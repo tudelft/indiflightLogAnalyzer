@@ -5,65 +5,77 @@ from glob import glob
 from os import path
 import pandas as pd
 import numpy as np
+import pickle
 
-dataFolder = "/mnt/data/WorkData/BlackboxLogs/2024-02-27/ExperimentsForReal";
+# G1/G2
+rowNames = ['x', 'y', 'z', 'p', 'q', 'r']
 
-files = glob(path.join(dataFolder, "*.BFL"));
+def analyseLogs(logPath, calcInitConds = False):
+    files = glob(path.join(logPath, "*.BFL"));
 
-parameters = []
-initialConditions = []
+    parameters = []
+    initialConditions = []
 
-#%% go through logs and get G1 and G2 parameters
-logs = []
-pars = []
-for runIdx, file in enumerate(files):
-    log = IndiflightLog(file)
-    logs.append(log)
-    lastRow = log.data.iloc[-1] 
+    #%% go through logs and get G1 and G2 parameters
+    logs = []
+    pars = []
+    for runIdx, file in enumerate(files):
+        log = IndiflightLog(file)
+        logs.append(log)
+        lastRow = log.data.iloc[-1] 
 
-    parameterRow = {'run': runIdx}
+        parameterRow = {'run': runIdx}
 
-    # G1/G2
-    rowNames = ['x', 'y', 'z', 'p', 'q', 'r']
+        for i, r in enumerate(rowNames):
+            for col in range(4):
+                parameterRow[f'G1_{r}_{col}'] = lastRow[f'fx_{r}_rls_x[{col}]']
 
-    for i, r in enumerate(rowNames):
-        for col in range(4):
-            parameterRow[f'G1_{r}_{col}'] = lastRow[f'fx_{r}_rls_x[{col}]']
+            if i >= 3:
+                for col in range(4,8):
+                    parameterRow[f'G2_{r}_{col-4}'] = lastRow[f'fx_{r}_rls_x[{col}]']
 
-        if i >= 3:
-            for col in range(4,8):
-                parameterRow[f'G2_{r}_{col-4}'] = lastRow[f'fx_{r}_rls_x[{col}]']
+        # motors
+        for motor in range(4):
+            a, b, w0, tau = lastRow[[f'motor_{motor}_rls_x[{i}]' for i in range(4)]]
+            a = a if a > 0 else 0xFFFF + a # integer overflow in the data... not nice
+            wm = a+b
+            lam = a / wm
+            parameterRow[f'motor_{motor}_wm'] = wm
+            parameterRow[f'motor_{motor}_k'] = lam
+            parameterRow[f'motor_{motor}_w0'] = w0
+            parameterRow[f'motor_{motor}_tau'] = tau
 
-    # motors
-    for motor in range(4):
-        a, b, w0, tau = lastRow[[f'motor_{motor}_rls_x[{i}]' for i in range(4)]]
-        a = a if a > 0 else 0xFFFF + a # integer overflow in the data... not nice
-        wm = a+b
-        lam = a / wm
-        parameterRow[f'motor_{motor}_wm'] = wm
-        parameterRow[f'motor_{motor}_k'] = lam
-        parameterRow[f'motor_{motor}_w0'] = w0
-        parameterRow[f'motor_{motor}_tau'] = tau
+        if calcInitConds:
+            # initial rotation rate, after 1400 ms
+            initCondIdx = (log.data['timeMs'] - 1400).abs().idxmin()
+            parameterRow['p0'] = log.data['gyroADC[0]'].loc[initCondIdx] # in rad/s
+            parameterRow['q0'] = log.data['gyroADC[1]'].loc[initCondIdx]
+            parameterRow['r0'] = log.data['gyroADC[2]'].loc[initCondIdx]
 
-    # initial rotation rate, after 1400 ms
-    initCondIdx = (log.data['timeMs'] - 1400).abs().idxmin()
-    parameterRow['p0'] = log.data['gyroADC[0]'].loc[initCondIdx] # in rad/s
-    parameterRow['q0'] = log.data['gyroADC[1]'].loc[initCondIdx]
-    parameterRow['r0'] = log.data['gyroADC[2]'].loc[initCondIdx]
+            # get minimum altitude from this point until the manual takeover
+            takeoverIdx = log.flags[log.flags['disable'].apply(lambda x: 9 in x)].index[0]
+            parameterRow['minH'] = -log.data['extPos[2]'].loc[initCondIdx:takeoverIdx].max()
 
-    # get minimum altitude from this point until the manual takeover
-    takeoverIdx = log.flags[log.flags['disable'].apply(lambda x: 9 in x)].index[0]
-    parameterRow['minH'] = -log.data['extPos[2]'].loc[initCondIdx:takeoverIdx].max()
+        pars.append(parameterRow.copy())
 
-    pars.append(parameterRow.copy())
+    #%% get mean and std as latex table
 
-#%% get mean and std as latex table
+    df = pd.DataFrame(pars)
+    df.set_index('run', inplace=True)
 
-df = pd.DataFrame(pars)
-df.set_index('run', inplace=True)
+    return df
+
+#dataPath = "/mnt/data/WorkData/BlackboxLogs/2024-02-27/ExperimentsForReal";
+dataPath = "/mnt/data/WorkData/BlackboxLogs/2024-03-05/Cyberzoo"
+
+df = analyseLogs(dataPath, calcInitConds=True)
 
 mean = df.mean()
 std = df.std()
+
+G1df = pd.DataFrame([], index=rowNames)
+G2df = pd.DataFrame([], index=rowNames[3:])
+motordf = pd.DataFrame([], index=['$\omega_{max}$', '$\kappa$', '$\omega_{k}$', '$\\tau$ [ms]'])
 
 # from genGMc.py
 G1_fromData = np.array([
@@ -84,11 +96,7 @@ k = 0.46 # from prop bench test
 omega0 = 449.725817910626 # from prop bench test
 tau = 0.02 # from prop bench test
 
-G1df = pd.DataFrame([], index=rowNames)
-G2df = pd.DataFrame([], index=rowNames[3:])
-motordf = pd.DataFrame([], index=['$\omega_{max}$', '$k$', '$\omega_{k}$', '$\\tau$ [ms]'])
 motordf['Benchtest'] = [omegaMax, k, omega0, tau]
-
 for motor in range(4):
     G1df[f'True motor {motor}'] = G1_fromData[:, motor]
     G1df[f'Mean motor {motor}'] = mean.filter(regex=f'^G1_[xyzpqr]_{motor}').to_list()
@@ -105,6 +113,7 @@ for motor in range(4):
 print((1e6                            *G1df).to_latex(float_format="%.3f"))
 print((1e3                            *G2df).to_latex(float_format="%.3f"))
 print((np.array([[1.,1.,1.,1000.]]).T *motordf).to_latex(float_format="%.3f"))
+
 
 #%% Initial condition scatter
 
@@ -162,9 +171,66 @@ fig.savefig('InitialRotation.pdf', format='pdf')
 #fig.show()
 
 
+#%% Simulation results
+
+#dataPathSim = "/mnt/data/WorkData/BlackboxLogs/2024-03-05/HIL_Randomisation"
+dataPathSim = "/mnt/data/WorkData/BlackboxLogs/2024-03-06"
+dfSim = analyseLogs(dataPathSim, calcInitConds=False)
+
+pkls = glob(path.join(dataPathSim, "*.pkl"))
+trueParameters = []
+for runIdx, pkl in enumerate(pkls):
+    with open(pkl, 'rb') as f:
+        data = pickle.load(f)
+
+    omegaMax = 4113.
+
+    parameterRow = {'run': runIdx}
+    for i, r in enumerate(rowNames):
+        for col in range(4):
+            parameterRow[f'G1_{r}_{col}'] = data['G1'][i, col] / omegaMax**2
+        if (i >= 3):
+            for col in range(4):
+                parameterRow[f'G2_{r}_{col}'] = data['G2'][i, col]
+
+    # motors
+    for motor in range(4):
+        parameterRow[f'motor_{motor}_wm'] = omegaMax 
+        parameterRow[f'motor_{motor}_k'] = data['kappas'][motor]
+        parameterRow[f'motor_{motor}_w0'] = 0.
+        parameterRow[f'motor_{motor}_tau'] = data['taus'][motor]
+
+    trueParameters.append(parameterRow)
+
+dfSimTrue = pd.DataFrame(trueParameters)
+dfSimTrue.set_index('run', inplace=True)
+
+dfError = (dfSimTrue - dfSim)[:3]
+
+dfOverview = pd.DataFrame({'nominal': dfSimTrue.abs().mean(),
+                           'errorRMS': (dfError**2).mean()**0.5}).T
+
+G1df = pd.DataFrame([], index=rowNames)
+G2df = pd.DataFrame([], index=rowNames[3:])
+motordf = pd.DataFrame([], index=['$\omega_{max}$', '$\kappa$', '$\omega_{idle}$', '$\\tau$ [ms]'])
+
+G1df['nominal'] = dfOverview.filter(regex=f'^G1_[xyzpqr]_{0}').T['nominal'].to_numpy()
+G2df['nominal'] = dfOverview.filter(regex=f'^G2_[pqr]_{0}').T['nominal'].to_numpy()
+motordf['nominal'] = dfOverview.filter(regex=f'^motor_{0}').T['nominal'].to_numpy()
+
+for motor in range(4):
+    G1df[f'errorRMS {motor}'] = dfOverview.filter(regex=f'^G1_[xyzpqr]_{motor}').T['errorRMS'].to_numpy()
+    G2df[f'errorRMS {motor}'] = dfOverview.filter(regex=f'^G2_[pqr]_{motor}').T['errorRMS'].to_numpy()
+    motordf[f'errorRMS {motor}'] = dfOverview.filter(regex=f'^motor_{motor}').T['errorRMS'].to_numpy()
+
+print((1e6                            *G1df).to_latex(float_format="%.3f"))
+print((1e3                            *G2df).to_latex(float_format="%.3f"))
+print((np.array([[1.,1.,1.,1000.]]).T *motordf).to_latex(float_format="%.3f"))
+
 #%% Time plots excitation
 
-log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-02-27/Experiments500HzLoggingAndThrows/LOG00228.BFL")
+#log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-02-27/Experiments500HzLoggingAndThrows/LOG00228.BFL")
+log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-03-05/Cyberzoo/LOG00271.BFL")
 timeMs = log.data['timeMs'] - 1435
 boolarr = (timeMs > 0) & (timeMs < 457)
 timeMs = timeMs[boolarr]
@@ -183,7 +249,6 @@ for i in range(4):
                 label=f'Motor {i}')
     axs[1].set_xlabel("Time [ms]")
     axs[1].set_ylabel("Motor Rotation Rate $\omega$ [rad/s]")
-
 
 axs[2].plot(timeMs,
             180./np.pi * crop[[f'gyroADCafterRpm[{i}]' for i in range(3)]])

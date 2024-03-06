@@ -115,6 +115,8 @@ class IndiflightLog(object):
             return single(bits)
 
     def __init__(self, filename, timeRange=None, useCache=True):
+        self.filename = filename
+
         if useCache:
             self.raw, self.parameters = self._tryCacheLoad(filename)
 

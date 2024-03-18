@@ -28,7 +28,8 @@ plt.rcParams['axes.prop_cycle'] = cycler('linestyle', ['-', '--', ':', '-.'])
 from logTools import IndiflightLog, Signal, imuOffsetCorrection
 
 log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-03-05/Cyberzoo/LOG00271.BFL")
-crop, timeS = log.crop(1.435, 1.435+0.5)
+#crop, timeS = log.crop(1.435, 1.435+0.475)   # ident
+crop, timeS = log.crop(1.435+0.475, 1.435+2.000)    # recover
 timeMs = timeS * 1e3
 
 order = 2
@@ -40,25 +41,22 @@ gyroRaw = Signal(timeS, crop[[f'gyroADCafterRpm[{i}]' for i in range(3)]])
 spfRaw = Signal(timeS, crop[[f'accUnfiltered[{i}]' for i in range(3)]])
 spfRawCor = Signal(timeS, imuOffsetCorrection(spfRaw.y.copy(), gyroRaw.y, gyroRaw.dot().y, r))
 
-from matplotlib import gridspec
 fig = plt.figure(figsize=(11, 14))
 gs = fig.add_gridspec(10, 3)
 
 axFx = []
 g = 0
 while g < 10:
-    axFx.append(fig.add_subplot(gs[g, 0]))
-    #axFx[-1].sharex(axFx[0])
+    axFx.append(fig.add_subplot(gs[g, 1]))
     g += 1 if g != 5 else 2
 
-axG1 = fig.add_subplot(gs[:5, 1])
-axG2 = fig.add_subplot(gs[6:, 1])
-axGyro = fig.add_subplot(gs[:2, 2])
-axd = fig.add_subplot(gs[2:4, 2])
-axOmega = fig.add_subplot(gs[4:6, 2])
-axStep = fig.add_subplot(gs[8:, 2])
-
-#fig, axs = plt.subplots(9, 3, figsize=(11, 14))#, sharex='row')
+axG1 = fig.add_subplot(gs[:5, 2])
+axG2 = fig.add_subplot(gs[7:, 2])
+axd = fig.add_subplot(gs[0:1, 0])
+axOmega = fig.add_subplot(gs[1:3, 0])
+axSpGyro = fig.add_subplot(gs[3:5, 0])
+axGyro = fig.add_subplot(gs[5:7, 0])
+axStep = fig.add_subplot(gs[8:, 0])
 
 tSteps = np.linspace(0, 0.2, 101)
 def stepResp(t, tau):
@@ -68,6 +66,7 @@ axisSymbols = ['x', 'y', 'z', 'p', 'q', 'r']
 axisNames = ['Surge', 'Sway', 'Hieve', 'Roll', 'Pitch', 'Yaw']
 
 gyroLines = []
+gyroSpLines = []
 fxLines = [[] for _ in range(9)]
 for axis in range(0, 9):
     l = axFx[axis].plot([0], [[0 for _ in range(4)]])
@@ -79,18 +78,24 @@ for axis in range(0, 9):
         axGyro.set_ylim(bottom=-1600,top=1600)
         axGyro.set_xlim(left=timeMs[0], right=timeMs[-1])
         axGyro.legend(['Roll', 'Pitch', 'Yaw'], ncols=3, loc="upper left")
-        axGyro.set_xticklabels([])
+        axGyro.set_xlabel("Time [ms]")
         gyroLines.append(l)
+        l, = axSpGyro.plot([0], [0])
+        axSpGyro.set_ylabel("Rate Setpoint $\Omega_r$ [$\circ$/s]")
+        axSpGyro.set_ylim(bottom=-1600,top=1600)
+        axSpGyro.set_xlim(left=timeMs[0], right=timeMs[-1])
+        #axSpGyro.legend(['Roll', 'Pitch', 'Yaw'], ncols=3, loc="upper left")
+        #axSpGyro.set_xlabel("Time [ms]")
+        gyroSpLines.append(l)
     elif axis < 6:
         axFx[axis].set_ylim(bottom=-5e-5, top=5e-5)
     else:
-        axFx[axis].set_ylim(bottom=-3e-3, top=3e-3)
+        axFx[axis].set_ylim(bottom=-2.5e-3, top=2.5e-3)
 
     if axis < 6:
         axFx[axis].set_ylabel(axisNames[axis])
     else:
         axFx[axis].set_ylabel(axisNames[axis-3])
-
 
     if axis == 0:
         axFx[axis].set_title("$\omega^2$ Effectiveness Values")
@@ -122,17 +127,17 @@ for motor in range(4):
     l, = axd.plot([0], [0])
     axd.set_ylim(bottom=0, top=100)
     axd.set_xlim(left=timeMs[0], right=timeMs[-1])
-    axd.set_ylabel("Motor Commands [$\%$]")
-    axd.legend([f"Motor {i}" for i in range(1,5)], ncols=2)
+    axd.set_ylabel("Motor Input [$\%$]")
+    #axd.legend([f"Motor {i}" for i in range(1,5)], ncols=2)
     axd.set_xticklabels([])
     exLines.append(l)
 
     l, = axOmega.plot([0], [0])
     axOmega.set_ylim(bottom=0, top=60000)
     axOmega.set_xlim(left=timeMs[0], right=timeMs[-1])
-    axOmega.set_xlabel("Time [ms]")
     axOmega.set_ylabel("Motor RPM")
-    axd.legend([f"Motor {i}" for i in range(1,5)], ncols=2)
+    axOmega.set_xticklabels([])
+    axOmega.legend([f"Motor {i}" for i in range(1,5)], ncols=2)
     omegaLines.append(l)
 
 allLines = []
@@ -178,6 +183,14 @@ def func(frame):
         y = list(line.get_ydata())
         x.append(frame['timeMs'])
         y.append(frame['gyro'][axis] * 180/np.pi)
+        line.set_data(x, y)
+        allLines.append(line)
+
+    for axis, line in enumerate(gyroSpLines):
+        x = list(line.get_xdata())
+        y = list(line.get_ydata())
+        x.append(frame['timeMs'])
+        y.append(frame['gyroSp'][axis] * 180/np.pi)
         line.set_data(x, y)
         allLines.append(line)
 
@@ -240,6 +253,7 @@ def data_gen():
             G2[axi, :] = theta
 
         gyro = row[[f'gyroADCafterRpm[{i}]' for i in range(3)]].to_numpy(dtype=float)
+        gyroSp = row[[f'gyroSp[{i}]' for i in range(3)]].to_numpy(dtype=float)
 
         for motor in range(4):
             theta = row[[f'motor_{motor}_rls_x[{i}]' for i in range(4)]].to_numpy(dtype=float)
@@ -255,7 +269,7 @@ def data_gen():
 
         frame = { 'wmax': wmax, 'widle': widle, 'tau': tau,
                   'd': d, 'omega': omega,
-                  'gyro': gyro,
+                  'gyro': gyro, 'gyroSp': gyroSp,
                   'timeMs': row['timeMs'], 'G1': G1, 'G2': G2 }
         print (index, tau)
         yield frame
@@ -265,5 +279,5 @@ ani = animation.FuncAnimation(fig, func, data_gen, init_func=init,
                               interval=2, blit=True, repeat=False,
                               save_count=len(crop))
 FFwriter = animation.FFMpegWriter(fps=500/slowDown, bitrate=10000)
-ani.save('test.mp4', writer=FFwriter)
+ani.save('recoveryData.mp4', writer=FFwriter)
 #plt.show()

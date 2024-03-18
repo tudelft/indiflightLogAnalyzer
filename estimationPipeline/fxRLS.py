@@ -19,25 +19,28 @@ if __name__=="__main__":
     N_ACT = 4
 
     # fitting parameters
-    fc = 20. # Hz. tau = 1/(2*pi*fc) if first order
+    fc = 5. # Hz. tau = 1/(2*pi*fc) if first order
     order = 2 # 1 --> simple first order. 2 and up --> butterworth
-    gamma = 1e0
-    forgetting = 0.995 # todo: dependent on sampling rate?
+    gamma = 1e2
+    forgetting = 0.999 # todo: dependent on sampling rate?
 
     # load unfiltered data into numpy
     log = IndiflightLog(args.datafile, args.range)
-    u     = Signal(log.data['timeS'], log.data[[f'u[{i}]' for i in range(N_ACT)]])
-    omega = Signal(log.data['timeS'], log.data[[f'omegaUnfiltered[{i}]' for i in range(N_ACT)]])
-    gyro  = Signal(log.data['timeS'], log.data[[f'gyroADCafterRpm[{i}]' for i in range(3)]])
-    acc   = Signal(log.data['timeS'], log.data[[f'accUnfiltered[{i}]' for i in range(3)]])
-    r = np.array([-0.006622, -0.01167, 0.02307]) # TODO: get this automatically from imuLocationRLS
-    #r = np.zeros((3,))
+    #u     = Signal(log.data['timeS'], log.data[[f'u[{i}]' for i in range(N_ACT)]])
+    #omega = Signal(log.data['timeS'], log.data[[f'omegaUnfiltered[{i}]' for i in range(N_ACT)]])
+    #gyro  = Signal(log.data['timeS'], log.data[[f'gyroADCafterRpm[{i}]' for i in range(3)]])
+    #acc   = Signal(log.data['timeS'], log.data[[f'accUnfiltered[{i}]' for i in range(3)]])
+    omega = Signal(log.data['timeS'], 100*2/log.parameters['motor_poles']/60*2*np.pi*log.data[[f'debug[{i}]' for i in range(N_ACT)]])
+    gyro  = Signal(log.data['timeS'], log.data[[f'gyroADC[{i}]' for i in range(3)]])
+    acc   = Signal(log.data['timeS'], log.data[[f'accSmooth[{i}]' for i in range(3)]])
+    #r = np.array([-0.006622, -0.01167, 0.02307]) # TODO: get this automatically from imuLocationRLS
+    r = np.zeros((3,))
     accCorrected = Signal(log.data['timeS'],
                           imuOffsetCorrection(acc.y, gyro.y, gyro.dot().y, r))
 
     # filter unfiltered data
-    uFilt = u.filter('lowpass', order, fc)
-    uFilt.setSignal(np.clip(uFilt.y, 0., 1.)) # can happen on order > 1
+    #uFilt = u.filter('lowpass', order, fc)
+    #uFilt.setSignal(np.clip(uFilt.y, 0., 1.)) # can happen on order > 1
 
     omegaFilt = omega.filter('lowpass', order, fc)
     gyroFilt = gyro.filter('lowpass', order, fc)
@@ -53,7 +56,7 @@ if __name__=="__main__":
                    '$\Delta\dot p$', '$\Delta\dot q$', '$\Delta\dot r$']
     axisEstimators = []
     axisSelect = list(range(6)) # or [2] to get only accZ for instance 
-    axisSelect = [2,5]
+    #axisSelect = [2,5]
     for axis in axisSelect:
         if axis < 3:
             # specific force

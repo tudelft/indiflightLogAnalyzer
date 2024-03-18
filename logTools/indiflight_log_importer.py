@@ -165,6 +165,11 @@ class IndiflightLog(object):
         except FileNotFoundError:
             pass
 
+    def crop(self, start, stop):
+        timeS = self.data['timeS']
+        boolarr = (timeS >= start) & (timeS <= stop)
+        return self.data[boolarr], timeS[boolarr].to_numpy()
+
     def _tryCacheLoad(self, filename):
         from platformdirs import user_cache_dir
 
@@ -229,7 +234,11 @@ class IndiflightLog(object):
         data['timeS'] = 1e-6 * timeUs
 
         # adjust column units
-        highRes = 10. if self.parameters['blackbox_high_resolution'] else 1.
+        if "blackbox_high_resolution" in self.parameters.keys():
+            highRes = 10. if self.parameters['blackbox_high_resolution'] else 1.
+        else:
+            highRes = 1.
+
         for col in data.columns:
             if col == 'loopIteration':
                 data[col] = data[col].astype(int)

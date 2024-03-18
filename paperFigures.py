@@ -73,23 +73,23 @@ df = analyseLogs(dataPath, calcInitConds=True)
 mean = df.mean()
 std = df.std()
 
-G1df = pd.DataFrame([], index=rowNames)
-G2df = pd.DataFrame([], index=rowNames[3:])
-motordf = pd.DataFrame([], index=['$\omega_{max}$', '$\kappa$', '$\omega_{k}$', '$\\tau$ [ms]'])
+G1df = pd.DataFrame([], index=[f"$B_{{1,{r}}}\cdot k \cdot 10^6$" for r in rowNames])
+G2df = pd.DataFrame([], index=[f"$B_{{2,{r}}}\cdot 10^3$" for r in rowNames[3:]])
+motordf = pd.DataFrame([], index=['$\omega_{\\text{max}}$', '$\kappa$', '$\omega_{\\text{idle}}$', '$\\tau$ [ms]'])
 
 # from genGMc.py
 G1_fromData = np.array([
        [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00, 0.00000000e+00],
        [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00, 0.00000000e+00],
-       [-5.11538462e-07, -5.11538462e-07, -5.11538462e-07, -5.11538462e-07],
-       [-2.34408005e-05, -2.34408005e-05,  2.34408005e-05, 2.34408005e-05],
-       [-1.56027856e-05,  1.56027856e-05, -1.56027856e-05, 1.56027856e-05],
-       [-3.00214289e-06,  3.00214289e-06,  3.00214289e-06, -3.00214289e-06]])
+       [-6.21495327e-07, -6.21495327e-07, -6.21495327e-07, -6.21495327e-07],
+       [-2.34401887e-05, -2.34401887e-05,  2.34401887e-05, 2.34401887e-05],
+       [-1.57181818e-05,  1.57181818e-05, -1.57181818e-05, 1.57181818e-05],
+       [-2.98876404e-06,  2.98876404e-06,  2.98876404e-06, -2.98876404e-06]])
 
 G2_fromData = np.array([
        [ 0.        , -0.        , -0.        ,  0.        ],
        [ 0.        , -0.        , -0.        ,  0.        ],
-       [-0.00101221,  0.00101221,  0.00101221, -0.00101221]])
+       [-0.00101124,  0.00101124,  0.00101124, -0.00101124]])
 
 omegaMax = 4113.063728303113 # from prop bench test
 k = 0.46 # from prop bench test
@@ -137,10 +137,10 @@ plt.rcParams.update({
     "legend.loc": 'upper right',
     "legend.fontsize": 9,
     "legend.columnspacing": 2.0,
-    'figure.subplot.bottom': 0.17,
+    'figure.subplot.bottom': 0.19,
     'figure.subplot.left': 0.07,
     'figure.subplot.right': 0.96,
-    'figure.subplot.top': 0.93,
+    'figure.subplot.top': 0.92,
     'figure.subplot.hspace': 0.3,
     'figure.subplot.wspace': 0.4,
     'figure.titlesize': 'large',
@@ -210,9 +210,9 @@ dfError = (dfSimTrue - dfSim)[:3]
 dfOverview = pd.DataFrame({'nominal': dfSimTrue.abs().mean(),
                            'errorRMS': (dfError**2).mean()**0.5}).T
 
-G1df = pd.DataFrame([], index=rowNames)
-G2df = pd.DataFrame([], index=rowNames[3:])
-motordf = pd.DataFrame([], index=['$\omega_{max}$', '$\kappa$', '$\omega_{idle}$', '$\\tau$ [ms]'])
+G1df = pd.DataFrame([], index=[f"$G_{{1,{r}}}$" for r in rowNames])
+G2df = pd.DataFrame([], index=[f"$G_{{2,{r}}}$" for r in rowNames[3:]])
+motordf = pd.DataFrame([], index=['$\omega_{\\text{max}}$', '$\kappa$', '$\omega_{\\text{idle}}$', '$\\tau$ [ms]'])
 
 G1df['nominal'] = dfOverview.filter(regex=f'^G1_[xyzpqr]_{0}').T['nominal'].to_numpy()
 G2df['nominal'] = dfOverview.filter(regex=f'^G2_[pqr]_{0}').T['nominal'].to_numpy()
@@ -229,6 +229,32 @@ print((np.array([[1.,1.,1.,1000.]]).T *motordf).to_latex(float_format="%.3f"))
 
 #%% Time plots excitation
 
+plt.rcParams.update({
+    "text.usetex": True,
+#    "font.family": "Helvetica",
+    "font.family": "sans-serif",
+    "font.size": 12,
+    "axes.grid": True,
+    "axes.grid.which": 'both',
+    "grid.linestyle": '--',
+    "grid.alpha": 0.7,
+    "axes.labelsize": 10,
+    "axes.titlesize": 16,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.loc": 'upper right',
+    "legend.fontsize": 9,
+    "legend.columnspacing": 1.0,
+    'figure.subplot.bottom': 0.15,
+    'figure.subplot.left': 0.13,
+    'figure.subplot.right': 0.96,
+    'figure.subplot.top': 0.94,
+    'figure.subplot.hspace': 0.15,
+    'figure.subplot.wspace': 0.4,
+    'figure.titlesize': 'large',
+    'lines.linewidth': 1,
+})
+
 #log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-02-27/Experiments500HzLoggingAndThrows/LOG00228.BFL")
 log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-03-05/Cyberzoo/LOG00271.BFL")
 timeMs = log.data['timeMs'] - 1435
@@ -236,30 +262,31 @@ boolarr = (timeMs > 0) & (timeMs < 457)
 timeMs = timeMs[boolarr]
 crop = log.data[boolarr]
 
-f, axs = plt.subplots(1, 3, figsize=(9, 2.7), sharex='all')
+f, axs = plt.subplots(2, 1, figsize=(5.0, 3.2), sharex='all')
+#f, axs = plt.subplots(1, 3, figsize=(9, 2.2), sharex='all')
 for i in range(4):
     axs[0].plot(timeMs,
                 crop[f'motor[{i}]'],
-                label=f'Motor {i}')
-    axs[0].set_xlabel("Time [ms]")
+                label=f'Motor {i+1}')
+    #axs[0].set_xlabel("Time [ms]")
     axs[0].set_ylabel("Motor input $\delta$ [-]")
 
-    axs[1].plot(timeMs,
-                crop[f'omegaUnfiltered[{i}]'],
-                label=f'Motor {i}')
-    axs[1].set_xlabel("Time [ms]")
-    axs[1].set_ylabel("Motor Rotation Rate $\omega$ [rad/s]")
+    #axs[1].plot(timeMs,
+    #            crop[f'omegaUnfiltered[{i}]'],
+    #            label=f'Motor {i}')
+    #axs[1].set_xlabel("Time [ms]")
+    #axs[1].set_ylabel("Motor Rotation Rate $\omega$ [rad/s]")
 
-axs[2].plot(timeMs,
-            180./np.pi * crop[[f'gyroADCafterRpm[{i}]' for i in range(3)]])
-axs[2].set_xlabel("Time [ms]")
-axs[2].set_ylabel("Body Rotation Rate $\Omega$ [deg/s]")
-axs[2].legend(["Roll", "Pitch", "Yaw"], loc='upper left')
+axs[1].plot(timeMs,
+            crop[[f'gyroADCafterRpm[{i}]' for i in range(3)]])
+axs[1].set_xlabel("Time [ms]")
+axs[1].set_ylabel("Body Rate $\Omega$ [rad/s]")
+axs[1].legend(["Roll", "Pitch", "Yaw"], loc='upper left', ncol=3)
 
 axs[0].set_ylim(top=1.)
-axs[1].set_ylim(top=4000.)
-axs[0].legend( ncol=2 )
-axs[1].legend( ncol=2 )
+#axs[1].set_ylim(top=4000.)
+axs[0].legend( ncol=4 )
+#axs[1].legend( ncol=2 )
 
 f.savefig('Excitation.pdf', format='pdf')
 
@@ -310,8 +337,8 @@ for axi, ax in enumerate(['x', 'y', 'z']):
     theta = crop[[f'fx_{ax}_rls_x[{i}]' for i in range(4)]].to_numpy()
     reproduction = np.array([t.T @ r for t, r in zip(theta, regSpf)])
 
-    axs[0].plot(timeMs, spfRawCor.diff().y[:, axi], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered")
-    axs[0].plot(timeMs, spfFiltCor.diff().y[:, axi], lw=1.0, ls='-', label=f"Synchro-filtered")
+    axs[0].plot(timeMs, spfRawCor.diff().y[:, axi], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered Output")
+    axs[0].plot(timeMs, spfFiltCor.diff().y[:, axi], lw=1.0, ls='-', label=f"Filtered Output")
     axs[0].plot(timeMs, reproduction, lw=1.5, ls='-.', label=f"Online reproduction")
     axs[0].set_xlabel("Time [ms]")
     axs[0].set_ylabel("Specific Force Delta [N/kg]")
@@ -335,8 +362,8 @@ for axi, ax in enumerate(['p', 'q', 'r']):
     theta = crop[[f'fx_{ax}_rls_x[{i}]' for i in range(8)]].to_numpy()
     reproduction = np.array([t.T @ r for t, r in zip(theta, regRot)])
 
-    axs[0].plot(timeMs, gyroRaw.dot().diff().y[:, axi], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered")
-    axs[0].plot(timeMs, gyroFilt.dot().diff().y[:, axi], lw=1.0, ls='-', label=f"Synchro-filtered")
+    axs[0].plot(timeMs, gyroRaw.dot().diff().y[:, axi], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered Output")
+    axs[0].plot(timeMs, gyroFilt.dot().diff().y[:, axi], lw=1.0, ls='-', label=f"Filtered Output")
     axs[0].plot(timeMs, reproduction, lw=1.5, ls='-.', label=f"Online reproduction")
     axs[0].set_xlabel("Time [ms]")
     axs[0].set_ylabel("Rotation Acceleration Delta [$rad/s^2$]")
@@ -349,18 +376,62 @@ for axi, ax in enumerate(['p', 'q', 'r']):
     else:
         axs[1].set_ylim(bottom=-1e-4, top=1e-4)
     axs[1].set_xlabel("Time [ms]")
-    axs[1].set_ylabel("Effectiveness [$\\frac{Nm/(kg\cdot m^2)}{(rad/s)^2}$]")
-    axs[1].legend([f'Motor {i}' for i in range(4)], loc='upper left', ncols=2)
+    axs[1].set_ylabel("Effectiveness $B_1 k$ [$\\frac{Nm/(kg\cdot m^2)}{(rad/s)^2}$]")
+    axs[1].legend([f'Motor {i+1}' for i in range(4)], loc='upper left', ncols=2)
 
     axs[2].plot(timeMs, theta[:, 4:])
     axs[2].set_ylim(bottom=-6e-3, top=6e-3)
     axs[2].set_xlabel("Time [ms]")
-    axs[2].set_ylabel("Acceleration effectiveness [$\\frac{Nm/(kg\cdot m^2)}{(rad/s^2)}$]")
-    axs[2].legend([f'Motor {i}' for i in range(4)], loc='upper right', ncols = 2)
+    axs[2].set_ylabel("Effectiveness $B_2$ [$\\frac{Nm/(kg\cdot m^2)}{(rad/s^2)}$]")
+    axs[2].legend([f'Motor {i+1}' for i in range(4)], loc='upper right', ncols = 2)
 
     frls.suptitle(f"Online Estimation for {axis_names[axi]} Effectiveness")
 
     frls.savefig(f"Fx_estimation_{ax}.pdf", format='pdf')
+
+plt.rcParams.update({
+    'figure.subplot.bottom': 0.15,
+    'figure.subplot.left': 0.1,
+    'figure.subplot.right': 0.97,
+    'figure.subplot.top': 0.95,
+    'figure.subplot.hspace': 0.15,
+    'figure.subplot.wspace': 0.35,
+    "axes.formatter.limits": [-2, 4]
+})
+
+# recovery
+timeMs = log.data['timeMs'] - 1435
+boolarr = (timeMs > 474) & (timeMs < 2000)
+timeMsRec = timeMs[boolarr]
+rec = log.data[boolarr]
+
+frec, axs = plt.subplots(2, 1, figsize=(5, 3.5), sharex=True)
+axs[0].plot(timeMsRec, rec['gyroSp[0]'], "-", label="Roll rate reference")
+axs[0].plot(timeMsRec, rec['gyroADCafterRpm[0]'], ls="none", marker='x', markevery=25, markersize=4, label="Roll rate")
+axs[0].plot(timeMsRec, rec['gyroSp[1]'], "--", label="Pitch rate reference")
+axs[0].plot(timeMsRec, rec['gyroADCafterRpm[1]'], ls="none", marker='s', markevery=25, markersize=4, label="Pitch rate", markerfacecolor="none")
+#alpha = Signal(timeMsRec*1e-3, rec[[f'gyroADCafterRpm[{i}]' for i in range(3)]]).dot()
+#
+#axs[0].plot(timeMsRec, rec['alphaSp[0]'], "-", label="Roll rate reference")
+#axs[0].plot(timeMsRec, alpha.y[:, 0], ls="none", marker='x', markevery=25, markersize=4, label="Roll rate")
+#axs[0].plot(timeMsRec, rec['alphaSp[1]'], "--", label="Pitch rate reference")
+#axs[0].plot(timeMsRec, alpha.y[:, 1], ls="none", marker='s', markevery=25, markersize=4, label="Pitch rate", markerfacecolor="none")
+axs[0].set_ylabel("Body Rate [rad/s]")
+axs[0].legend(loc="upper right", ncols=2)
+axs[1].plot(timeMsRec, rec[[f'motor[{i}]' for i in range(4)]])
+axs[1].set_xlabel("Time [ms]")
+axs[1].set_ylabel("Motor command $\delta$ [-]")
+axs[1].legend([f"Motor {i+1}" for i in range(4)], loc="lower right", ncols=2)
+frec.savefig("Recovery.pdf", format='pdf')
+
+plt.rcParams.update({
+    'figure.subplot.left': 0.05,
+    'figure.subplot.right': 0.95,
+    'figure.subplot.top': 0.85,
+    'figure.subplot.hspace': 0.3,
+    'figure.subplot.wspace': 0.35,
+    "axes.formatter.limits": [-2, 3]
+})
 
 # motors
 timeMs = log.data['timeMs'] - 1435
@@ -385,7 +456,7 @@ for motor in range(4):
 
     theta = crop[[f'motor_{motor}_rls_x[{i}]' for i in range(4)]].to_numpy()
     wm = theta[:, 0] + theta[:, 1]
-    k = 0.5
+    k = theta[:, 0] / wm
     a = wm * k
     b = 1 - a
     theta[:, 0] = a
@@ -397,8 +468,8 @@ for motor in range(4):
     regMotor[:, 3] = -omegaMotorFilt.dot().y[:, motor]
     reproduction = np.array([t.T @ r for t, r in zip(theta, regMotor)])
 
-    axs[0].plot(timeMs, omegaRaw.y[:, motor], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered")
-    axs[0].plot(timeMs, omegaMotorFilt.y[:, motor], lw=1.0, ls='-', label=f"synchro-filtered")
+    axs[0].plot(timeMs, omegaRaw.y[:, motor], alpha=0.5, lw=0.5, ls='--', label=f"Unfiltered Output")
+    axs[0].plot(timeMs, omegaMotorFilt.y[:, motor], lw=1.0, ls='-', label=f"Filtered Output")
     axs[0].plot(timeMs, reproduction, lw=1.5, ls='-.', label=f"Online reproduction")
     axs[0].set_xlabel("Time [ms]")
     axs[0].set_ylabel("Motor Rotation Rate [rad/s]")
@@ -418,9 +489,9 @@ for motor in range(4):
     axs[2].set_ylabel("Motor time constant $\\tau$ [s]")
     axs[2].legend("Time constant")
 
-    frls.suptitle(f"Online Estimation for Motor Model {motor}")
+    frls.suptitle(f"Online Estimation for Motor Model {motor+1}")
 
-    frls.savefig(f"Motor_estimation_{motor}.pdf", format='pdf')
+    frls.savefig(f"Motor_estimation_{motor+1}.pdf", format='pdf')
 
 # %% Plot trajectories
 

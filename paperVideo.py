@@ -27,9 +27,12 @@ plt.rcParams['axes.prop_cycle'] = cycler('linestyle', ['-', '--', ':', '-.'])
 
 from logTools import IndiflightLog, Signal, imuOffsetCorrection
 
-log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-03-05/Cyberzoo/LOG00271.BFL")
+#log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-03-05/Cyberzoo/LOG00271.BFL")
 #crop, timeS = log.crop(1.435, 1.435+0.475)   # ident
-crop, timeS = log.crop(1.435+0.475, 1.435+2.000)    # recover
+#crop, timeS = log.crop(1.435+0.475, 1.435+2.000)    # recover
+log = IndiflightLog("/mnt/data/WorkData/BlackboxLogs/2024-03-18_IROSVideoShoot/LOG00342.BFL")
+#crop, timeS = log.crop(1.285, 1.285+0.475)   # ident
+crop, timeS = log.crop(1.285+0.475, 1.285+2.000)    # recover
 timeMs = timeS * 1e3
 
 order = 2
@@ -279,5 +282,6 @@ ani = animation.FuncAnimation(fig, func, data_gen, init_func=init,
                               interval=2, blit=True, repeat=False,
                               save_count=len(crop))
 FFwriter = animation.FFMpegWriter(fps=500/slowDown, bitrate=10000)
+#ani.save('identData.mp4', writer=FFwriter)
 ani.save('recoveryData.mp4', writer=FFwriter)
 #plt.show()

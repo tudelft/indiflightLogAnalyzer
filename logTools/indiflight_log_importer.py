@@ -8,6 +8,7 @@ import logging
 import pickle
 import sys
 import os
+import re
 from matplotlib import pyplot as plt
 from hashlib import md5
 
@@ -114,6 +115,8 @@ class IndiflightLog(object):
             return single(bits)
 
     def __init__(self, filename, timeRange=None, useCache=True):
+        self.filename = filename
+
         if useCache:
             self.raw, self.parameters = self._tryCacheLoad(filename)
 
@@ -161,6 +164,11 @@ class IndiflightLog(object):
                 os.remove(os.path.join(cachedir, file_name))
         except FileNotFoundError:
             pass
+
+    def crop(self, start, stop):
+        timeS = self.data['timeS']
+        boolarr = (timeS >= start) & (timeS <= stop)
+        return self.data[boolarr], timeS[boolarr].to_numpy()
 
     def _tryCacheLoad(self, filename):
         from platformdirs import user_cache_dir
@@ -226,7 +234,11 @@ class IndiflightLog(object):
         data['timeS'] = 1e-6 * timeUs
 
         # adjust column units
-        highRes = 10. if self.parameters['blackbox_high_resolution'] else 1.
+        if "blackbox_high_resolution" in self.parameters.keys():
+            highRes = 10. if self.parameters['blackbox_high_resolution'] else 1.
+        else:
+            highRes = 1.
+
         for col in data.columns:
             if col == 'loopIteration':
                 data[col] = data[col].astype(int)
@@ -245,7 +257,7 @@ class IndiflightLog(object):
                 data[col] *= self.ONE_G / self.parameters['acc_1G']
                 if ("[1]" in col) or ("[2]" in col):
                     data[col] *= -1.
-            elif col.startswith('motor'):
+            elif re.match(r'^motor\[[0-9]+\]$', col):
                 data[col] -= self.DSHOT_MIN
                 data[col] /= (self.DSHOT_MAX - self.DSHOT_MIN)
             elif col.startswith('quat'):
@@ -274,6 +286,48 @@ class IndiflightLog(object):
                 data[col] /= 1000.
             elif col.startswith('ekf_gyro_b'):
                 data[col] /= self.RADIANS_TO_DEGREES
+            elif (match := re.match(r'^motor_[0-9]+_rls_x\[([0-9]+)\]$', col)):
+                bbscaler = 1000.
+                yscaler = 0.001
+                if match.group(1) in ['0', '1', '2']:
+                    # a, b, and w0
+                    ascaler = 1.
+                elif match.group(1) in ['3']:
+                    # time constant
+                    ascaler = 0.0001
+                else:
+                    raise NotImplementedError(f"Regressor {match.group(1)} not expected")
+
+                data[col] /= bbscaler * yscaler / ascaler
+            elif (match := re.match(r'^fx_([xyzpqr])_rls_x\[([0-9]+)\]$', col)):
+                bbscaler = 1000.
+                if match.group(1) in ['x', 'y', 'z']:
+                    # forces. All 4 regressors have scale 1e-5. Output has scaler 10.
+                    yscaler = 10.
+                    ascaler = 1e-5
+                elif match.group(1) in ['p', 'q', 'r']:
+                    # rotations. First 4 regressors have scale 1e-5. Last 4 scale 1e-3 Output has scaler 1.
+                    yscaler = 1.
+                    if match.group(2) in ['0', '1', '2', '3']:
+                        ascaler = 1e-5
+                    elif match.group(2) in ['4', '5', '6', '7']:
+                        ascaler = 1e-3
+                    else:
+                        raise NotImplementedError(f"Regressor {match.group(2)} not expected")
+                else:
+                    raise NotImplementedError(f"Output {match.group(1)} not expected")
+
+                data[col] /= bbscaler * yscaler / ascaler
+            elif (match := re.match(r'^imu_rls_x\[([0-9]+)\]$', col)):
+                if match.group(1) not in ['0', '1', '2']:
+                    raise NotImplementedError(f"Output {match.group(1)} not expected")
+                    # forces. All 4 regressors have scale 1e-5. Output has scaler 10.
+                bbscaler = 1000.
+                yscaler = 1.
+                ascaler = 1e-2
+                data[col] /= bbscaler * yscaler / ascaler
+            elif (col == "learnerGains"):
+                data[col] /= 10.
             elif (col == "flightModeFlags") or (col == "stateFlags")\
                     or (col == "failsafePhase") or (col == "rxSignalReceived")\
                     or (col == "rxFlightChannelValid"):

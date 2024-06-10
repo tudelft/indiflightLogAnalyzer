@@ -249,14 +249,10 @@ class IndiflightLog(object):
                 data[col] /= 500. * highRes
             elif col.startswith('gyro'):
                 data[col] /= self.RADIANS_TO_DEGREES * highRes
-                if col.startswith('gyroADC') and ( ("[1]" in col) or ("[2]" in col) ):
-                    data[col] *= -1.
             elif col.startswith('accSp'):
                 data[col] /= self.METER_TO_CM
             elif col.startswith('acc'):
                 data[col] *= self.ONE_G / self.parameters['acc_1G']
-                if ("[1]" in col) or ("[2]" in col):
-                    data[col] *= -1.
             elif re.match(r'^motor\[[0-9]+\]$', col):
                 data[col] -= self.DSHOT_MIN
                 data[col] /= (self.DSHOT_MAX - self.DSHOT_MIN)

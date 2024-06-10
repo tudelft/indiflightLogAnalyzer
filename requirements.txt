@@ -1,0 +1,11 @@
+cycler==0.12.1
+matplotlib==3.9.0
+numpy==1.21.5
+numpy_quaternion==2022.4.3
+opencv_python==4.9.0.80
+opencv_python_headless==4.9.0.80
+orangebox==0.3.0
+pandas==2.0.0
+platformdirs==4.2.2
+sage==0.0.0
+scipy==1.8.0

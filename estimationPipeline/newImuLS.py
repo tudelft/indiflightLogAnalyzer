@@ -20,6 +20,24 @@ if __name__=="__main__":
 
     ranges = [tuple(r) for r in args.range] if args.range else []
 
+
+    #%% symbolic math
+    from sympy import Matrix, symbols
+    wx, wy, wz = symbols("wx wy wz")
+    dwx, dwy, dwz = symbols("dwx dwy dwz")
+    ax, ay, az = symbols("ax ay az")
+    rx, ry, rz = symbols("rx ry rz")
+    w = Matrix([[wx,wy,wz]])
+    dw = Matrix([[dwx,dwy,dwz]])
+    a = Matrix([[ax,ay,az]])
+    r = Matrix([[rx,ry,rz]])
+
+    print("\n\n")
+    Asym = a + dw.cross(r) + w.cross( w.cross(r) )
+    print("aMeasured = ", a, "+",  Asym.jacobian(r), "*", r)
+    print("\n\n")
+
+    #%% data filtting
     # fitting parameters
     fc = 50. # Hz. tau = 1/(2*pi*fc) if first order
     order = 2 # 1 --> simple first order. 2 and up --> butterworth
@@ -29,7 +47,11 @@ if __name__=="__main__":
     accFilt = np.empty((0, 3))
     logFull = None
 
-    for r in ranges:
+    Arows = []
+    yrows = []
+    xhat = []
+
+    for j, r in enumerate(ranges):
         if logFull is None:
             logFull = log = IndiflightLog(args.datafile, r)
             log.resetTime()
@@ -48,51 +70,118 @@ if __name__=="__main__":
         dgyroFilt = np.concatenate( (dgyroFilt, gyro.filtfilt('lowpass', order, fc).dot().y))
         accFilt = np.concatenate( (accFilt, acc.filtfilt('lowpass', order, fc).y))
 
+        A = np.empty((gyroFilt.shape[0], 3, 3))
+        for i, (w, dw, a) in enumerate(zip(gyroFilt, dgyroFilt, accFilt)):
+            wx, wy, wz = w
+            dwx, dwy, dwz = dw
+            A[i] = np.array([
+                [-(wy*wy + wz*wz),    wx*wy - dwz   ,    wx*wz + dwy   ],
+                [  wx*wy + dwz   ,  -(wx*wx + wz*wz),    wy*wz - dwx   ],
+                [  wx*wz - dwy   ,    wy*wz + dwx   ,  -(wx*wx + wy*wy)],
+                ])
+
+        # stack regressors and observations
+        Arows.append( A.reshape(-1, 3) )
+        yrows.append( accFilt.reshape(-1) )
+
+        # solve
+        xh, residuals, rank, s = np.linalg.lstsq(Arows[-1], yrows[-1], rcond=None)
+        xhat.append(xh)
+
     logFull.resetTime()
-
-    A = np.empty((gyroFilt.shape[0], 3, 3))
-    for i, (w, dw, a) in enumerate(zip(gyroFilt, dgyroFilt, accFilt)):
-        wx, wy, wz = w
-        dwx, dwy, dwz = dw
-        A[i] = -np.array([
-            [-(wy*wy + wz*wz),    wx*wy - dwz   ,    wx*wz + dwy   ],
-            [  wx*wy + dwz   ,  -(wx*wx + wz*wz),    wy*wz - dwx   ],
-            [  wx*wz - dwy   ,    wy*wz + dwx   ,  -(wx*wx + wy*wy)],
-            ])
-
-    # stack regressors and observations
-    Arows = A.reshape(-1, 3)
-    yrows = accFilt.reshape(-1)
-
-    # solve
-    x, residuals, rank, s = np.linalg.lstsq(Arows, yrows, rcond=None)
 
     # statitics
     # https://learnche.org/pid/least-squares-modelling/multiple-linear-regression
+    from scipy.stats import chi2
+
+    DOF = 3
+    q = 0.95
+    crit = chi2.ppf(q, DOF)
+
+    # Plot the ellipsoid --> chatGPT
+    fig = plt.figure(figsize=(10,6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlabel('X [mm]')
+    ax.set_ylabel('Y [mm]')
+    ax.set_zlabel('Z [mm]')
+    xmax = -np.inf; xmin = np.inf;
+    ymax = -np.inf; ymin = np.inf;
+    zmax = -np.inf; zmin = np.inf;
+    for k, (xh, ys, A) in enumerate(zip(xhat, yrows, Arows)):
+        N = int(len(ys)/3)
+        residuals = ys - A @ xh
+        SE2 = (residuals @ residuals) / (N - DOF)
+        Sigma = np.linalg.inv(A.T @ A) * SE2
+
+        # unit ball --> chatGPT
+        num_points = 20
+        u = np.linspace(0, 2 * np.pi, num_points)
+        v = np.linspace(0, np.pi, num_points)
+        x = 1e3*np.outer(np.cos(u), np.sin(v))
+        y = 1e3*np.outer(np.sin(u), np.sin(v))
+        z = 1e3*np.outer(np.ones(np.size(u)), np.cos(v))
+
+        eigvals, eigvecs = np.linalg.eigh(Sigma)
+        radii = np.sqrt(eigvals * crit)
+        # strech unit ball --> chatGPT
+        for i in range(len(x)):
+            for j in range(len(x)):
+                [x[i, j], y[i, j], z[i, j]] = radii * np.dot(eigvecs, [x[i, j], y[i, j], z[i, j]])
+        x += 1e3*xh[0]
+        y += 1e3*xh[1]
+        z += 1e3*xh[2]
+        xmax = max(xmax, x.max()); xmin = min(xmin, x.min())
+        ymax = max(ymax, y.max()); ymin = min(ymin, y.min())
+        zmax = max(zmax, z.max()); zmin = min(zmin, z.min())
+
+        ax.plot_surface(x, y, z, alpha=0.3, edgecolor='k', linewidth=0.2, label=f'Throw {"+".join([str(x+1) for x in range(k+1)])}')
+        print("hey")
+
+    # Plot the estimated parameters
+    #ax.scatter(1e3*xhat[-1][0], 1e3*xhat[-1][1], 1e3*xhat[-1][2], color='r', s=100)
+
+    max_range = np.array([xmax-xmin, ymax - ymin, zmax - zmin]).max() / 2.0
+    mean_x = (xmax + xmin) / 2.0
+    mean_y = (ymax + ymin) / 2.0
+    mean_z = (zmax + zmin) / 2.0
+
+    ax.set_xlim(mean_x - max_range, mean_x + max_range)
+    ax.set_ylim(mean_y - max_range, mean_y + max_range)
+    ax.set_zlim(mean_z - max_range, mean_z + max_range)
+
+    ax.legend(fontsize=12)
+    ax.view_init(elev=25, azim=-21, roll=0)
+
+    fig.savefig("95pEllipsoidsIMU.pdf", format='pdf')
+
+    #plt.show()
+
     print()
-    print(f"x [mm]: {(x*1e3).round(2)}")
-    print(f"2norm(b - Ax) [m/s/s]: {residuals[0]:.3f}")
-    N = len(logFull.data)
-    SE = residuals[0] / np.sqrt(N - 3)
-    print(f"SE [m/s/s]: {SE:.4f}")
-    print(f"95% confidence ellipsoid semi-major axes [mm]: {2. * SE**2 / s * 1e3}")
+    print(f"x [mm]: {(xhat[-1]*1e3).round(2)}")
 
-    U, s, Vt = np.linalg.svd(Arows, full_matrices=False)
-    scaling_factor = np.sqrt(N / (N - 3)) * np.sqrt(1 - 1 / (N * 0.95))
-    semi_axes_lengths = scaling_factor * (1 / s)
-
-
-    f, axs = plt.subplots(3, 1, sharex=True)
+    f, axs = plt.subplots(4, 1, figsize=(8, 7), sharex=True)
+    f.subplots_adjust(left=0.098, bottom=0.074, right=0.96, top=0.974)
     timeMs = logFull.data['timeMs']
 
-    axs[0].plot( timeMs, logFull.data[[f"gyroADCafterRpm[{i}]" for i in range(3)]])
     axs[0].plot( timeMs, gyroFilt )
+    axs[0].set_ylabel("Gyro [rad/s]")
+    axs[0].legend(['x','y','z'],fontsize=12)
 
     axs[1].plot( timeMs, dgyroFilt )
+    axs[1].set_ylabel("Gyro Derivative [rad/s/s]")
+    #axs[1].legend(fontsize=10)
 
-    axs[2].plot( timeMs, logFull.data[[f"accADCafterRpm[{i}]" for i in range(3)]])
     axs[2].plot( timeMs, accFilt )
+    axs[2].set_ylabel("Spec force [N/kg]")
+    axs[2].set_ylim(bottom=-4.0, top=+4.0)
+    #axs[1].legend(fontsize=10)
 
+    axs[3].plot( timeMs, accFilt - Arows[-1].reshape(-1, 3, 3) @ xhat[-1] )
+    axs[3].set_ylim(bottom=-0.4, top=+0.4)
+    axs[3].set_ylabel("Corrected spec force [N/kg]")
+    axs[3].set_xlabel("Time [ms]")
+    #axs[3].legend(fontsize=10)
 
+    f.savefig("accCorrection.pdf", format='pdf')
 
 

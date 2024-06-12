@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.signal import butter, sosfilt, sosfilt_zi, lfilter, lfilter_zi
+from scipy.signal import butter, sosfilt, sosfilt_zi, lfilter, lfilter_zi, filtfilt, sosfiltfilt
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 import logging
@@ -76,6 +76,7 @@ class Signal(object):
             logging.debug(f'Cache miss for key {key}')
             yDiff = np.zeros_like(self.y, dtype=float)
             yDiff[order:] = np.diff(self.y, n=order, axis=0)
+            yDiff[:order] = yDiff[order]
 
             self.sig[key] = Signal(self.t, yDiff)
         else:
@@ -89,6 +90,7 @@ class Signal(object):
             logging.debug(f'Cache miss for key {key}')
             yDiff = np.zeros_like(self.y, dtype=float)
             yDiff[order:] = np.diff(self.y, n=order, axis=0)
+            yDiff[:order] = yDiff[order]
             yDot = yDiff / (self.dt[:, np.newaxis]**order)
 
             self.sig[key] = Signal(self.t, yDot)
@@ -132,6 +134,47 @@ class Signal(object):
                 zi = self.y[0] * sosfilt_zi(sos)[:, :, np.newaxis]
 
                 yFilt, _ = sosfilt(sos, self.y, axis=0, zi=zi)
+
+            # perform filtering and add to hashmap
+            self.sig[key] = Signal(self.t, yFilt)
+        else:
+            logging.debug(f'Cache hit for key {key}')
+
+        return self.sig[key]
+
+    def filtfilt(self, type, order, cutoff_hz):
+        if type not in ['lowpass', 'highpass', 'bandpass']:
+            raise ValueError("If filter_type is given, it must be either 'lowpass', 'highpass', 'bandpass'")
+
+        # check cutoff argument for bandpass
+        if type == 'bandpass':
+            try:
+                if len(cutoff_hz) != 2:
+                    raise ValueError("cutoff_Hz must be length-2 list for type='bandpass'")
+                cutoff_hz = list(cutoff_hz)
+            except TypeError:
+                raise TypeError("cutoff_Hz must be length-2 list for type='bandpass'")
+
+        # check if not yet cached and compute values
+        key = f'{type}-{order}-{cutoff_hz}'
+        if key not in self.sig.keys():
+            logging.debug(f'Cache miss for key {key}')
+            # design filter and initial condition
+            if order == 1:
+                # pure lowpass with single zero
+                #b, a = butter(order, cutoff_hz, btype=type, fs=self.fs, output='ba')
+                #b[0] += b[1]
+                #b[1] = 0
+                alpha = 2*np.pi / (self.fs/cutoff_hz + 2*np.pi)
+                b = [alpha, 0]
+                a = [1., -(1. - alpha)]
+
+                yFilt = filtfilt(b, a, self.y, axis=0)
+            else:
+                # second order and up are implemented as maximally flat butterworth
+                sos = butter(order, cutoff_hz, type, fs=self.fs, output='sos')
+
+                yFilt = sosfiltfilt(sos, self.y, axis=0)
 
             # perform filtering and add to hashmap
             self.sig[key] = Signal(self.t, yFilt)

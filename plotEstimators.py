@@ -35,16 +35,22 @@ if __name__=="__main__":
 
     f, axs = plt.subplots(5, 3, sharex=True)
     axs[0, 0].plot(tMs, log.data[[f'fx_x_rls_x[{motor}]' for motor in range(4)]].to_numpy())
+    axs[0, 0].set_ylabel("x")
     axs[1, 0].plot(tMs, log.data[[f'fx_y_rls_x[{motor}]' for motor in range(4)]].to_numpy())
+    axs[1, 0].set_ylabel("y")
     axs[2, 0].plot(tMs, log.data[[f'fx_z_rls_x[{motor}]' for motor in range(4)]].to_numpy())
+    axs[2, 0].set_ylabel("z")
     for i in range(3):
-        axs[i, 0].set_ylim(-5e-6, 5e-6)
+        axs[i, 0].set_ylim(-2e-6, 2e-6)
     axs[3, 0].plot(tMs, log.data[[f'fx_{axis}_rls_e_var' for axis in ['x', 'y', 'z']]].to_numpy())
     axs[4, 0].plot(tMs, log.data[[f'fx_{axis}_rls_lambda' for axis in ['x', 'y', 'z']]].to_numpy())
 
     axs[0, 1].plot(tMs, log.data[[f'fx_p_rls_x[{motor}]' for motor in range(4)]].to_numpy())
+    axs[0, 1].set_ylabel("p")
     axs[1, 1].plot(tMs, log.data[[f'fx_q_rls_x[{motor}]' for motor in range(4)]].to_numpy())
+    axs[1, 1].set_ylabel("q")
     axs[2, 1].plot(tMs, log.data[[f'fx_r_rls_x[{motor}]' for motor in range(4)]].to_numpy())
+    axs[2, 1].set_ylabel("r")
     for i in range(2):
         axs[i, 1].set_ylim(-1e-4, 1e-4)
     axs[2, 1].set_ylim(-1e-5, 1e-5)
@@ -58,6 +64,10 @@ if __name__=="__main__":
         axs[i, 2].set_ylim(-1e-3, 1e-3)
     axs[3, 2].plot(tMs, log.data[[f'fx_{axis}_rls_e_var' for axis in ['p', 'q', 'r']]].to_numpy())
     axs[4, 2].plot(tMs, log.data[[f'fx_{axis}_rls_lambda' for axis in ['p', 'q', 'r']]].to_numpy())
+    axs[0, 2].legend(["1","2","3","4"])
+
+    for i in range(3):
+        axs[4, i].set_ylim(0.9, 1.)
 
     f.show()
 

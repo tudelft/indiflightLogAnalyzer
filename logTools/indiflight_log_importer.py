@@ -39,6 +39,7 @@ plt.rcParams.update({
 })
 
 class IndiflightLog(object):
+    UNIT_FLOAT_TO_UNSIGNED16VB = ((127 << 7) - 1)
     UNIT_FLOAT_TO_SIGNED16VB = ((127 << 6) - 1)
     RADIANS_TO_DEGREES = 57.2957796
     RADIANS_TO_DECADEGREES = 1e-1 * RADIANS_TO_DEGREES
@@ -324,10 +325,15 @@ class IndiflightLog(object):
                 data[col] /= bbscaler * yscaler / ascaler
             elif (col == "learnerGains"):
                 data[col] /= 10.
+            elif (match := re.match(r'^.*_lambda$', col)):
+                data[col] /= self.UNIT_FLOAT_TO_UNSIGNED16VB
+            elif (match := re.match(r'^.*_e_var$', col)):
+                data[col] /= 0.1 * ((1 << 16) - 1)
             elif (col == "flightModeFlags") or (col == "stateFlags")\
                     or (col == "failsafePhase") or (col == "rxSignalReceived")\
                     or (col == "rxFlightChannelValid"):
-                data[col].replace("", 0, inplace=True)
+                with pd.option_context("future.no_silent_downcasting", True):
+                    data.replace({col: {"": 0}}, inplace=True)
                 data[col] = data[col].astype(int)
 
         return data

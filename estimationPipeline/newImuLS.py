@@ -99,7 +99,9 @@ if __name__=="__main__":
     crit = chi2.ppf(q, DOF)
 
     # Plot the ellipsoid --> chatGPT
-    fig = plt.figure(figsize=(10,6))
+    fig = plt.figure(figsize=(6,6))
+    fig.subplots_adjust(left=0., bottom=0., right=0.92, top=1.)
+
     ax = fig.add_subplot(111, projection='3d')
     ax.set_xlabel('X [mm]')
     ax.set_ylabel('Y [mm]')
@@ -134,7 +136,7 @@ if __name__=="__main__":
         ymax = max(ymax, y.max()); ymin = min(ymin, y.min())
         zmax = max(zmax, z.max()); zmin = min(zmin, z.min())
 
-        ax.plot_surface(x, y, z, alpha=0.3, edgecolor='k', linewidth=0.2, label=f'Throw {"+".join([str(x+1) for x in range(k+1)])}')
+        ax.plot_surface(x, y, z, alpha=0.3, edgecolor=None, linewidth=0.1, label=f'Throw {"+".join([str(x+1) for x in range(k+1)])}')
         print("hey")
 
     # Plot the estimated parameters

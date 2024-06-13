@@ -97,9 +97,10 @@ f.savefig("hoverAttitude.pdf", format="pdf")
 #%% execution time plot
 
 plt.rcParams.update({
+    "legend.fontsize": 10,
     'figure.subplot.bottom': 0.20,
     'figure.subplot.left': 0.12,
-    'figure.subplot.right': 0.87,
+    'figure.subplot.right': 0.97,
     'figure.subplot.top': 0.96,
     'figure.subplot.hspace': 0.3,
     'figure.subplot.wspace': 0.35,
@@ -136,7 +137,7 @@ handles = ax.stackplot(
 hatches = ['//', '\\\\', '**', '..', '--', 'xx', 'oo', 'OO', '++', '||']
 for i, handle in enumerate(handles):
     handle.set_hatch(hatches[i])
-ax.set_ylabel( "Exec Time [$\mu$s]" )
+ax.set_ylabel( "Execution Time [$\mu$s]" )
 ax.set_xlabel( "Time [ms]" )
 ax.legend( handles[::-1], legendNames[::-1], loc="upper left")
 

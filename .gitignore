@@ -162,3 +162,4 @@ cython_debug/
 *.eps
 *.pdf
 *.mp4
+*.png

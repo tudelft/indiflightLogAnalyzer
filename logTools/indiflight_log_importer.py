@@ -323,8 +323,10 @@ class IndiflightLog(object):
                 yscaler = 1.
                 ascaler = 1e-2
                 data[col] /= bbscaler * yscaler / ascaler
-            elif (col == "learnerGains"):
+            elif (col.startswith("learnerGains")):
                 data[col] /= 10.
+            elif (col.startswith("hoverAttitude")):
+                data[col] /= self.UNIT_FLOAT_TO_SIGNED16VB
             elif (match := re.match(r'^.*_lambda$', col)):
                 data[col] /= self.UNIT_FLOAT_TO_UNSIGNED16VB
             elif (match := re.match(r'^.*_e_var$', col)):

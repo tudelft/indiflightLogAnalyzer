@@ -6,6 +6,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from logTools import IndiflightLog, RLS, Signal
+# ipython -i estimationPipeline/newImuLS.py -- /mnt/data/WorkData/BlackboxLogs/2024-06-10/IMU_throws/LOG00403_pitchRollYaw.BFL -r 4600 4900 -r 8300 8500 -r 11300 11400
 
 if __name__=="__main__":
     logging.basicConfig(
@@ -95,11 +96,11 @@ if __name__=="__main__":
     from scipy.stats import chi2
 
     DOF = 3
-    q = 0.95
+    q = 0.99
     crit = chi2.ppf(q, DOF)
 
     # Plot the ellipsoid --> chatGPT
-    fig = plt.figure(figsize=(6,6))
+    fig = plt.figure(figsize=(6,5))
     fig.subplots_adjust(left=0., bottom=0., right=0.92, top=1.)
 
     ax = fig.add_subplot(111, projection='3d')
@@ -128,7 +129,7 @@ if __name__=="__main__":
         # strech unit ball --> chatGPT
         for i in range(len(x)):
             for j in range(len(x)):
-                [x[i, j], y[i, j], z[i, j]] = radii * np.dot(eigvecs, [x[i, j], y[i, j], z[i, j]])
+                [x[i, j], y[i, j], z[i, j]] = (radii*eigvecs) @ np.array([x[i, j], y[i, j], z[i, j]])
         x += 1e3*xh[0]
         y += 1e3*xh[1]
         z += 1e3*xh[2]
@@ -149,10 +150,12 @@ if __name__=="__main__":
 
     ax.set_xlim(mean_x - max_range, mean_x + max_range)
     ax.set_ylim(mean_y - max_range, mean_y + max_range)
-    ax.set_zlim(mean_z - max_range, mean_z + max_range)
+    ax.set_zlim(mean_z - 0.2*max_range, mean_z + 0.2*max_range)
+    #ax.auto_scale_xyz([0, 500], [0, 500], [0, 0.15])
+    ax.set_box_aspect(aspect=(1, 1, 0.2))
 
     ax.legend(fontsize=12)
-    ax.view_init(elev=25, azim=-21, roll=0)
+    ax.view_init(elev=21, azim=-18, roll=0)
 
     fig.savefig("95pEllipsoidsIMU.pdf", format='pdf')
 

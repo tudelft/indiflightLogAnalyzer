@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+import matplotlib as mpl
 
 from logTools import IndiflightLog, RLS, Signal
 # ipython -i estimationPipeline/newImuLS.py -- /mnt/data/WorkData/BlackboxLogs/2024-06-10/IMU_throws/LOG00403_pitchRollYaw.BFL -r 4600 4900 -r 8300 8500 -r 11300 11400
@@ -67,9 +68,32 @@ if __name__=="__main__":
         gyro = Signal(log.data["timeS"], log.data[[f"gyroADCafterRpm[{i}]" for i in range(3)]] )
         acc  = Signal(log.data["timeS"], log.data[[f"accADCafterRpm[{i}]" for i in range(3)]] )
 
-        gyroFilt = np.concatenate( (gyroFilt, gyro.filtfilt('lowpass', order, fc).y))
-        dgyroFilt = np.concatenate( (dgyroFilt, gyro.filtfilt('lowpass', order, fc).dot().y))
-        accFilt = np.concatenate( (accFilt, acc.filtfilt('lowpass', order, fc).y))
+        gyroFiltSingle = gyro.filter('lowpass', order, fc).y
+        dgyroFiltSingle = gyro.filter('lowpass', order, fc).dot().y
+        accFiltSingle = acc.filter('lowpass', order, fc).y
+
+        gyroFilt = np.concatenate( (gyroFilt, gyroFiltSingle) )
+        dgyroFilt = np.concatenate( (dgyroFilt, dgyroFiltSingle) )
+        accFilt = np.concatenate( (accFilt, accFiltSingle) )
+
+        if j == 1:
+            A = np.empty((gyroFiltSingle.shape[0], 3, 3))
+            for i, (w, dw, a) in enumerate(zip(gyroFiltSingle, dgyroFiltSingle, accFiltSingle)):
+                wx, wy, wz = w
+                dwx, dwy, dwz = dw
+                A[i] = np.array([
+                    [-(wy*wy + wz*wz),    wx*wy - dwz   ,    wx*wz + dwy   ],
+                    [  wx*wy + dwz   ,  -(wx*wx + wz*wz),    wy*wz - dwx   ],
+                    [  wx*wz - dwy   ,    wy*wz + dwx   ,  -(wx*wx + wy*wy)],
+                    ])
+
+            # stack regressors and observations
+            Arows.append( A.reshape(-1, 3) )
+            yrows.append( accFiltSingle.reshape(-1) )
+
+            # solve
+            xh, residuals, rank, s = np.linalg.lstsq(Arows[-1], yrows[-1], rcond=None)
+            xhat.append(xh)
 
         A = np.empty((gyroFilt.shape[0], 3, 3))
         for i, (w, dw, a) in enumerate(zip(gyroFilt, dgyroFilt, accFilt)):
@@ -94,12 +118,24 @@ if __name__=="__main__":
     # statitics
     # https://learnche.org/pid/least-squares-modelling/multiple-linear-regression
     from scipy.stats import chi2
+    from scipy.stats import t
 
     DOF = 3
-    q = 0.99
+    q = 0.95
     crit = chi2.ppf(q, DOF)
+    #crit = t.ppf(q, DOF)
 
     # Plot the ellipsoid --> chatGPT
+    import cycler
+    #plt.rcParams['axes.prop_cycle'] = cycler.cycler(
+    #    color=[
+    #        '#333333',
+    #        '#777777',
+    #        '#cccccc',
+    #        ],
+    #    )
+    #mpl.rcParams['hatch.linewidth'] = 0.1
+
     fig = plt.figure(figsize=(6,5))
     fig.subplots_adjust(left=0., bottom=0., right=0.92, top=1.)
 
@@ -110,6 +146,7 @@ if __name__=="__main__":
     xmax = -np.inf; xmin = np.inf;
     ymax = -np.inf; ymin = np.inf;
     zmax = -np.inf; zmin = np.inf;
+    handles = []
     for k, (xh, ys, A) in enumerate(zip(xhat, yrows, Arows)):
         N = int(len(ys)/3)
         residuals = ys - A @ xh
@@ -117,7 +154,7 @@ if __name__=="__main__":
         Sigma = np.linalg.inv(A.T @ A) * SE2
 
         # unit ball --> chatGPT
-        num_points = 20
+        num_points = 50
         u = np.linspace(0, 2 * np.pi, num_points)
         v = np.linspace(0, np.pi, num_points)
         x = 1e3*np.outer(np.cos(u), np.sin(v))
@@ -137,8 +174,9 @@ if __name__=="__main__":
         ymax = max(ymax, y.max()); ymin = min(ymin, y.min())
         zmax = max(zmax, z.max()); zmin = min(zmin, z.min())
 
-        ax.plot_surface(x, y, z, alpha=0.3, edgecolor=None, linewidth=0.1, label=f'Throw {"+".join([str(x+1) for x in range(k+1)])}')
-        print("hey")
+        handle = ax.plot_surface(x, y, z, alpha=0.6, edgecolor='blue', linewidth=0.0, label=f'Throw {"+".join([str(x+1) for x in range(k+1)])}')
+        handles.append(handle)
+
 
     # Plot the estimated parameters
     #ax.scatter(1e3*xhat[-1][0], 1e3*xhat[-1][1], 1e3*xhat[-1][2], color='r', s=100)
@@ -154,7 +192,13 @@ if __name__=="__main__":
     #ax.auto_scale_xyz([0, 500], [0, 500], [0, 0.15])
     ax.set_box_aspect(aspect=(1, 1, 0.2))
 
-    ax.legend(fontsize=12)
+    ax.legend([handles[0], handles[1], handles[2], handles[3] ], [
+        "Throw $1$",
+        "Throw $2$",
+        "Throw $1 \cup 2$",
+        "Throw $1 \cup 2 \cup 3$",
+    ],
+        fontsize=12)
     ax.view_init(elev=21, azim=-18, roll=0)
 
     fig.savefig("95pEllipsoidsIMU.pdf", format='pdf')

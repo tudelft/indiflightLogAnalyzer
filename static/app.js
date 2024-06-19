@@ -162,7 +162,14 @@ const imuMesh = new THREE.Mesh(imuGeometry, darkBlueMaterial);
 
 const imuObject = new THREE.Object3D();
 imuObject.add(imuMesh);
-const axisHelper = new THREE.AxesHelper (0.15);
+let axisHelper = new THREE.AxesHelper (0.15);
+axisHelper.material = new THREE.LineDashedMaterial( {
+	color: 0x000000,
+	linewidth: 2,
+	scale: 1,
+	dashSize: 0.1,
+	gapSize: 0.1,
+} );
 axisHelper.setColors(0x00000, 0x00000, 0x00000)
 imuObject.add( axisHelper );
 imuObject.position.x = 0.16
